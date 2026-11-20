@@ -1011,6 +1011,119 @@ static void test_role_and_management(void)
            "N12: handshake does not hard-fill role or identity");
 }
 
+static void seed_transient_auth_state(pk_app_t *app)
+{
+    memset(&app->grant, 0, sizeof(app->grant));
+    app->has_grant = true;
+    app->grant.scope = pk_app_scope(app);
+    app->grant.until = app->now + PK_PARK_LEASE_MS;
+    app->grant.received = app->now;
+    app->grant.proof = true;
+    app->grant.parked = true;
+    app->grant.speed_present = true;
+    app->connected = true;
+    app->auth = PK_MSG_AUTH_EXPIRED;
+    app->auth_until = app->now + 60000;
+    app->reconnect.active = true;
+    app->addkey_requests_driver = true;
+    app->role_observed = true;
+    app->role_is_driver = true;
+    app->identity_binding_verified = true;
+    app->session_vcsec_proven = true;
+    app->session_infotainment_proven = true;
+}
+
+static bool transient_auth_state_cleared(const pk_app_t *app)
+{
+    return app->auth == PK_MSG_AUTH_UNCONFIRMED &&
+           app->auth_until == 0 &&
+           !app->reconnect.active &&
+           !app->addkey_requests_driver &&
+           !app->role_observed &&
+           !app->role_is_driver &&
+           !app->identity_binding_verified &&
+           !app->session_vcsec_proven &&
+           !app->session_infotainment_proven;
+}
+
+static void test_auth_lifecycle_cleanup(void)
+{
+    static const char *VIN_C = "SYNTH000000000003";
+    pk_app_t app;
+    pk_app_t cold;
+    pk_ble_adapter_t ad;
+    pk_ms_t old_auth_until;
+
+    /* Cold start must begin clean. */
+    pk_app_init(&cold, PK_VEHICLE_NONE, false);
+    expect(cold.auth_until == 0 && !cold.reconnect.active &&
+           !cold.addkey_requests_driver && !cold.role_observed &&
+           !cold.role_is_driver && !cold.identity_binding_verified &&
+           !cold.session_vcsec_proven && !cold.session_infotainment_proven,
+           "lifecycle: cold start has no transient auth/role/proof state");
+
+    /* Switch: re-selecting current keeps state; switching to another clears it. */
+    boot(&app, &ad);
+    expect(pk_store_add_verified(&app.store, VIN_B, PK_STORE_CRASH_NONE) &&
+           pk_store_add_verified(&app.store, VIN_C, PK_STORE_CRASH_NONE),
+           "lifecycle: add B and C");
+    seed_transient_auth_state(&app);
+    old_auth_until = app.auth_until;
+    expect(pk_app_select_vehicle(&app, 0) &&
+           app.role_observed && app.session_vcsec_proven &&
+           app.auth_until == old_auth_until && app.connected && app.has_grant,
+           "lifecycle: reselecting current car preserves live session state");
+    expect(pk_app_select_vehicle(&app, 1) && app.vehicle == 1 &&
+           transient_auth_state_cleared(&app),
+           "lifecycle: switch clears transient proof, role, and auth timer");
+    expect(pk_app_tick(&app, old_auth_until + 1000) == PK_OK &&
+           app.auth == PK_MSG_AUTH_UNCONFIRMED &&
+           app.message != PK_MSG_AUTH_EXPIRED,
+           "lifecycle: switch leaves no dangling auth_until timer");
+
+    /* Delete non-current preserves current car's live state; delete current clears it. */
+    expect(pk_app_select_vehicle(&app, 0) && app.vehicle == 0, "lifecycle: back to slot 0");
+    seed_transient_auth_state(&app);
+    old_auth_until = app.auth_until;
+    expect(pk_app_delete_vehicle(&app, 1, false, PK_STORE_CRASH_NONE) &&
+           app.vehicle == 0 && app.connected && app.has_grant &&
+           app.role_observed && app.role_is_driver &&
+           app.identity_binding_verified && app.session_vcsec_proven &&
+           app.session_infotainment_proven && app.auth_until == old_auth_until,
+           "lifecycle: deleting non-current car preserves current live session");
+    expect(pk_app_delete_vehicle(&app, 0, false, PK_STORE_CRASH_NONE) &&
+           app.vehicle == 2 && transient_auth_state_cleared(&app),
+           "lifecycle: deleting current car clears transient proof, role, and auth timer");
+    expect(pk_app_tick(&app, old_auth_until + 1000) == PK_OK &&
+           app.auth == PK_MSG_AUTH_UNCONFIRMED &&
+           app.message != PK_MSG_AUTH_EXPIRED,
+           "lifecycle: delete-current leaves no dangling auth_until timer");
+
+    /* Runtime reboot clears transient proof, role, and auth timer while keeping slot. */
+    seed_transient_auth_state(&app);
+    old_auth_until = app.auth_until;
+    pk_app_reboot(&app);
+    expect(app.vehicle == 2 && transient_auth_state_cleared(&app),
+           "lifecycle: runtime reboot clears transient proof, role, and auth timer");
+    expect(pk_app_tick(&app, old_auth_until + 1000) == PK_OK &&
+           app.auth == PK_MSG_AUTH_UNCONFIRMED &&
+           app.message != PK_MSG_AUTH_EXPIRED,
+           "lifecycle: runtime reboot leaves no dangling auth_until timer");
+
+    /* Disconnect marking auth unconfirmed also clears auth_until. */
+    app.connected = true;
+    app.auth = PK_MSG_AUTH_EXPIRED;
+    app.auth_until = app.now + 60000;
+    old_auth_until = app.auth_until;
+    pk_app_set_connected(&app, false);
+    expect(app.auth == PK_MSG_AUTH_UNCONFIRMED && app.auth_until == 0,
+           "lifecycle: disconnect clears auth_until when auth becomes unconfirmed");
+    expect(pk_app_tick(&app, old_auth_until + 1000) == PK_OK &&
+           app.auth == PK_MSG_AUTH_UNCONFIRMED &&
+           app.message != PK_MSG_AUTH_EXPIRED,
+           "lifecycle: disconnect leaves no dangling auth_until timer");
+}
+
 int main(void)
 {
     test_frozen_timing();
@@ -1027,6 +1140,7 @@ int main(void)
     test_driving_matrix();
     test_send_map();
     test_role_and_management();
+    test_auth_lifecycle_cleanup();
     if (g_fail) {
         fprintf(stderr, "s3 orchestrator: %d FAIL\n", g_fail);
         return 1;

@@ -70,8 +70,15 @@ void pk_app_clear_auth_state(pk_app_t *app)
     if (!app) {
         return;
     }
+    app->auth = PK_MSG_AUTH_UNCONFIRMED;
     app->auth_until = 0;
     app->reconnect.active = false;
+    app->addkey_requests_driver = false;
+    app->role_observed = false;
+    app->role_is_driver = false;
+    app->identity_binding_verified = false;
+    app->session_vcsec_proven = false;
+    app->session_infotainment_proven = false;
 }
 
 void pk_app_log(pk_app_t *app, pk_log_event_t ev, pk_log_err_t err)
@@ -231,6 +238,7 @@ void pk_app_set_connected(pk_app_t *app, bool connected)
     }
     pk_app_invalidate(app, PK_MSG_SWITCHED);
     app->auth = PK_MSG_AUTH_UNCONFIRMED;
+    app->auth_until = 0;
     if (connected) {
         app->reconnect.active = false;
         if (app->page == PK_PAGE_OFFLINE) {
@@ -505,6 +513,7 @@ void pk_app_reboot(pk_app_t *app)
     }
     orphan = app->orphan || app->enrollment_sent;
     pk_app_close_ap(app, "reboot");
+    pk_app_clear_auth_state(app);
     pk_app_invalidate(app, PK_MSG_REBOOT);
     app->session++;
     app->connected = false;
