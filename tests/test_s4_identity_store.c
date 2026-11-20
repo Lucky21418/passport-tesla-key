@@ -111,12 +111,17 @@ static bool g_nvs_immediate_flash_on_set = true;
 static int  g_nvs_set_calls = 0;
 static int  g_nvs_fail_set_at = 0; /* 1-based; 0 = disabled */
 static bool g_nvs_fail_commit = false;
+static int  g_nvs_fail_commit_left = 0;
+static bool g_nvs_arm_fail_commit_after_idv1_rb = false;
 static const char *g_nvs_corrupt_get_key = NULL;
 static int  g_nvs_corrupt_get_left = 0;
 static bool g_nvs_arm_corrupt_idv1_readback = false;
 static const char *g_nvs_fail_set_key = NULL;
 static int  g_nvs_fail_set_key_left = 0;
 static bool g_nvs_arm_fail_next_idv1_set = false;
+static const char *g_nvs_fail_erase_key = NULL;
+static int  g_nvs_fail_erase_key_left = 0;
+static bool g_nvs_arm_fail_next_idv1_erase = false;
 
 static void nvs_stub_reset(void)
 {
@@ -126,12 +131,17 @@ static void nvs_stub_reset(void)
     g_nvs_set_calls = 0;
     g_nvs_fail_set_at = 0;
     g_nvs_fail_commit = false;
+    g_nvs_fail_commit_left = 0;
+    g_nvs_arm_fail_commit_after_idv1_rb = false;
     g_nvs_corrupt_get_key = NULL;
     g_nvs_corrupt_get_left = 0;
     g_nvs_arm_corrupt_idv1_readback = false;
     g_nvs_fail_set_key = NULL;
     g_nvs_fail_set_key_left = 0;
     g_nvs_arm_fail_next_idv1_set = false;
+    g_nvs_fail_erase_key = NULL;
+    g_nvs_fail_erase_key_left = 0;
+    g_nvs_arm_fail_next_idv1_erase = false;
 }
 
 static void nvs_stub_power_cut(void)
@@ -140,12 +150,17 @@ static void nvs_stub_power_cut(void)
     g_nvs_work = g_nvs_flash;
     g_nvs_fail_set_at = 0;
     g_nvs_fail_commit = false;
+    g_nvs_fail_commit_left = 0;
+    g_nvs_arm_fail_commit_after_idv1_rb = false;
     g_nvs_corrupt_get_key = NULL;
     g_nvs_corrupt_get_left = 0;
     g_nvs_arm_corrupt_idv1_readback = false;
     g_nvs_fail_set_key = NULL;
     g_nvs_fail_set_key_left = 0;
     g_nvs_arm_fail_next_idv1_set = false;
+    g_nvs_fail_erase_key = NULL;
+    g_nvs_fail_erase_key_left = 0;
+    g_nvs_arm_fail_next_idv1_erase = false;
 }
 
 static stub_nvs_entry_t *nvs_find_entry(stub_nvs_table_t *tbl, const char *k, bool alloc)
@@ -209,6 +224,10 @@ esp_err_t nvs_get_blob(nvs_handle_t h, const char *k, void *out, size_t *len)
         strcmp(k, g_nvs_corrupt_get_key) == 0 && e->len > 0) {
         ((uint8_t *)out)[0] ^= 0xFFu;
         g_nvs_corrupt_get_left--;
+        if (g_nvs_arm_fail_commit_after_idv1_rb) {
+            g_nvs_fail_commit_left = 2;
+            g_nvs_arm_fail_commit_after_idv1_rb = false;
+        }
     }
     return ESP_OK;
 }
@@ -248,6 +267,11 @@ esp_err_t nvs_set_blob(nvs_handle_t h, const char *k, const void *val, size_t le
         g_nvs_fail_set_key_left = 1;
         g_nvs_arm_fail_next_idv1_set = false;
     }
+    if (g_nvs_arm_fail_next_idv1_erase && strcmp(k, "id_v1") == 0) {
+        g_nvs_fail_erase_key = "id_v1";
+        g_nvs_fail_erase_key_left = 1;
+        g_nvs_arm_fail_next_idv1_erase = false;
+    }
     return ESP_OK;
 }
 
@@ -256,6 +280,11 @@ esp_err_t nvs_erase_key(nvs_handle_t h, const char *k)
     stub_nvs_entry_t *e;
     (void)h;
     if (!k) {
+        return ESP_FAIL;
+    }
+    if (g_nvs_fail_erase_key && g_nvs_fail_erase_key_left > 0 &&
+        strcmp(k, g_nvs_fail_erase_key) == 0) {
+        g_nvs_fail_erase_key_left--;
         return ESP_FAIL;
     }
     e = nvs_find_entry(&g_nvs_work, k, false);
@@ -273,6 +302,10 @@ esp_err_t nvs_commit(nvs_handle_t h)
 {
     (void)h;
     if (g_nvs_fail_commit) {
+        return ESP_FAIL;
+    }
+    if (g_nvs_fail_commit_left > 0) {
+        g_nvs_fail_commit_left--;
         return ESP_FAIL;
     }
     g_nvs_flash = g_nvs_work;
@@ -1131,6 +1164,178 @@ static void test_n13_6_idv1_readback_consistency(void)
 }
 
 /* ==========================================================================
+ * N13.7: Same-VIN & Multi-Fault Retry Return Semantics After Double Fault
+ * ========================================================================== */
+
+static void test_n13_7_double_fault_retry_semantics(void)
+{
+    uint8_t p0[PK_PROTO_PRIVKEY_LEN], u0[PK_PROTO_PUBKEY_LEN];
+    uint8_t p1[PK_PROTO_PRIVKEY_LEN], u1[PK_PROTO_PUBKEY_LEN];
+    uint8_t p2[PK_PROTO_PRIVKEY_LEN], u2[PK_PROTO_PUBKEY_LEN];
+    test_id_v1_blob_t id;
+    test_kslot_rec_t d0, d1;
+    pk_proto_key_slot_t *ks0, *ks1;
+
+    /* N13.7a: Second-car double fault (id_v1 readback mismatch + rollback set fail),
+     * then same-boot retry with the SAME VIN_B and new candidate p2.
+     * Contract: retry must fail honestly (return false), retain consistent on-disk
+     * VIN_B + p1 (never void key_valid or mark key_corrupted), retain car 0 (p0),
+     * and cold boot must recover both car 0 (p0) and car 1 (p1) ready. */
+    nvs_stub_reset();
+    simulate_cold_boot();
+    load_candidate_key(0x71, p0, u0);
+    pk_store_add_verified(&g_app.store, SYN_VIN_A, PK_STORE_CRASH_NONE);
+    pk_store_switch_current(&g_app.store, 0);
+
+    g_nvs_arm_corrupt_idv1_readback = true;
+    g_nvs_arm_fail_next_idv1_set = true;
+    load_candidate_key(0x72, p1, u1);
+    check(!pk_store_add_verified(&g_app.store, SYN_VIN_B, PK_STORE_CRASH_NONE),
+          "N13.7a: double-fault add(VIN_B, p1) returns false");
+    g_nvs_corrupt_get_key = NULL;
+    g_nvs_fail_set_key = NULL;
+
+    load_candidate_key(0x73, p2, u2);
+    check(!pk_store_add_verified(&g_app.store, SYN_VIN_B, PK_STORE_CRASH_NONE),
+          "N13.7a: same-boot same-VIN retry(VIN_B, p2) fails honestly");
+    check(stub_read_id_v1(&id) &&
+          id.image.vehicles[0].used && id.image.vehicles[0].key_valid && !id.image.vehicles[0].key_corrupted &&
+          id.image.vehicles[1].used && strcmp(id.image.vehicles[1].vin, SYN_VIN_B) == 0 &&
+          id.image.vehicles[1].key_valid && !id.image.vehicles[1].key_corrupted &&
+          stub_read_kslot(0, &d0) && memcmp(d0.privkey, p0, PK_PROTO_PRIVKEY_LEN) == 0 &&
+          stub_read_kslot(1, &d1) && memcmp(d1.privkey, p1, PK_PROTO_PRIVKEY_LEN) == 0 &&
+          memcmp(d1.privkey, p2, PK_PROTO_PRIVKEY_LEN) != 0,
+          "N13.7a: same-VIN retry retains consistent on-disk VIN_A/p0 and VIN_B/p1 without voiding");
+
+    simulate_cold_boot();
+    ks0 = port_slot_keys(0);
+    ks1 = port_slot_keys(1);
+    check(pk_store_count(&g_app.store) == 2 &&
+          pk_store_slot_key_ready(&g_app.store, 0) && !pk_store_slot_key_corrupted(&g_app.store, 0) &&
+          pk_store_slot_key_ready(&g_app.store, 1) && !pk_store_slot_key_corrupted(&g_app.store, 1) &&
+          ks0 != NULL && memcmp(ks0->privkey, p0, PK_PROTO_PRIVKEY_LEN) == 0 &&
+          ks1 != NULL && memcmp(ks1->privkey, p1, PK_PROTO_PRIVKEY_LEN) == 0,
+          "N13.7a: cold boot after same-VIN retry keeps both car 0 (p0) and car 1 (p1) ready");
+
+    /* N13.7b: Second-car double fault -> same-boot DIFFERENT VIN_C retry + cold boot */
+    nvs_stub_reset();
+    simulate_cold_boot();
+    load_candidate_key(0x74, p0, u0);
+    pk_store_add_verified(&g_app.store, SYN_VIN_A, PK_STORE_CRASH_NONE);
+    pk_store_switch_current(&g_app.store, 0);
+
+    g_nvs_arm_corrupt_idv1_readback = true;
+    g_nvs_arm_fail_next_idv1_set = true;
+    load_candidate_key(0x75, p1, u1);
+    check(!pk_store_add_verified(&g_app.store, SYN_VIN_B, PK_STORE_CRASH_NONE),
+          "N13.7b: double-fault add(VIN_B, p1) returns false");
+    g_nvs_corrupt_get_key = NULL;
+    g_nvs_fail_set_key = NULL;
+
+    load_candidate_key(0x76, p2, u2);
+    check(!pk_store_add_verified(&g_app.store, SYN_VIN_C, PK_STORE_CRASH_NONE) &&
+          stub_read_id_v1(&id) && strcmp(id.image.vehicles[1].vin, SYN_VIN_B) == 0 &&
+          id.image.vehicles[1].key_valid && !id.image.vehicles[1].key_corrupted &&
+          stub_read_kslot(1, &d1) && memcmp(d1.privkey, p1, PK_PROTO_PRIVKEY_LEN) == 0,
+          "N13.7b: different-VIN retry fails honestly and never publishes p2 onto VIN_B");
+
+    simulate_cold_boot();
+    ks0 = port_slot_keys(0);
+    ks1 = port_slot_keys(1);
+    check(pk_store_count(&g_app.store) == 2 &&
+          pk_store_slot_key_ready(&g_app.store, 0) &&
+          pk_store_slot_key_ready(&g_app.store, 1) &&
+          ks0 != NULL && memcmp(ks0->privkey, p0, PK_PROTO_PRIVKEY_LEN) == 0 &&
+          ks1 != NULL && memcmp(ks1->privkey, p1, PK_PROTO_PRIVKEY_LEN) == 0,
+          "N13.7b: cold boot after different-VIN retry recovers VIN_A/p0 and VIN_B/p1");
+
+    /* N13.7c: First-car double fault (id_v1 readback mismatch + rollback erase fail),
+     * then same-boot same-VIN and different-VIN retries + cold boot. */
+    nvs_stub_reset();
+    simulate_cold_boot();
+    g_nvs_arm_corrupt_idv1_readback = true;
+    g_nvs_arm_fail_next_idv1_erase = true;
+    load_candidate_key(0x77, p0, u0);
+    check(!pk_store_add_verified(&g_app.store, SYN_VIN_A, PK_STORE_CRASH_NONE),
+          "N13.7c: first-car double-fault (readback + rollback erase fail) returns false");
+    g_nvs_corrupt_get_key = NULL;
+    g_nvs_fail_erase_key = NULL;
+
+    load_candidate_key(0x78, p1, u1);
+    check(!pk_store_add_verified(&g_app.store, SYN_VIN_A, PK_STORE_CRASH_NONE) &&
+          stub_read_id_v1(&id) && id.image.vehicles[0].used &&
+          id.image.vehicles[0].key_valid && !id.image.vehicles[0].key_corrupted &&
+          stub_read_kslot(0, &d0) && memcmp(d0.privkey, p0, PK_PROTO_PRIVKEY_LEN) == 0,
+          "N13.7c: first-car same-VIN retry fails honestly and retains valid VIN_A/p0");
+
+    load_candidate_key(0x79, p2, u2);
+    check(!pk_store_add_verified(&g_app.store, SYN_VIN_B, PK_STORE_CRASH_NONE) &&
+          stub_read_id_v1(&id) && strcmp(id.image.vehicles[0].vin, SYN_VIN_A) == 0 &&
+          id.image.vehicles[0].key_valid && !id.image.vehicles[0].key_corrupted,
+          "N13.7c: first-car different-VIN retry fails honestly and retains VIN_A/p0");
+
+    simulate_cold_boot();
+    ks0 = port_slot_keys(0);
+    check(pk_store_count(&g_app.store) == 1 &&
+          pk_store_slot_key_ready(&g_app.store, 0) && !pk_store_slot_key_corrupted(&g_app.store, 0) &&
+          ks0 != NULL && memcmp(ks0->privkey, p0, PK_PROTO_PRIVKEY_LEN) == 0,
+          "N13.7c: cold boot after first-car double-fault retries recovers car 0 (p0) ready");
+
+    /* N13.7d: Multi-fault commit window (readback mismatch + rollback nvs_commit fail),
+     * then same-boot same-VIN retry and save_prefs from stale RAM + cold boot. */
+    nvs_stub_reset();
+    simulate_cold_boot();
+    g_nvs_immediate_flash_on_set = false;
+    load_candidate_key(0x7A, p0, u0);
+    pk_store_add_verified(&g_app.store, SYN_VIN_A, PK_STORE_CRASH_NONE);
+    pk_store_switch_current(&g_app.store, 0);
+
+    g_nvs_arm_corrupt_idv1_readback = true;
+    g_nvs_arm_fail_commit_after_idv1_rb = true;
+    load_candidate_key(0x7B, p1, u1);
+    check(!pk_store_add_verified(&g_app.store, SYN_VIN_B, PK_STORE_CRASH_NONE),
+          "N13.7d: double-fault (readback mismatch + rollback commit fail) returns false");
+    g_nvs_corrupt_get_key = NULL;
+    g_nvs_fail_commit_left = 0;
+
+    /* On flash, id_v1 was committed before the corrupted readback and rollback commit
+     * failed, so flash still holds consistent VIN_B + p1. Restore work=flash to model
+     * non-atomic rollback commit failure, then test same-boot retries. */
+    g_nvs_work = g_nvs_flash;
+    load_candidate_key(0x7C, p2, u2);
+    check(!pk_store_add_verified(&g_app.store, SYN_VIN_B, PK_STORE_CRASH_NONE) &&
+          !pk_store_save_prefs(&g_app.store, 50, PK_POWER_ENDURANCE) &&
+          stub_read_id_v1(&id) && id.image.vehicles[1].used &&
+          id.image.vehicles[1].key_valid && !id.image.vehicles[1].key_corrupted &&
+          stub_read_kslot(1, &d1) && memcmp(d1.privkey, p1, PK_PROTO_PRIVKEY_LEN) == 0,
+          "N13.7d: same-boot same-VIN retry and stale save_prefs fail honestly and preserve VIN_B/p1");
+
+    simulate_cold_boot();
+    ks0 = port_slot_keys(0);
+    ks1 = port_slot_keys(1);
+    check(pk_store_count(&g_app.store) == 2 &&
+          pk_store_slot_key_ready(&g_app.store, 0) &&
+          pk_store_slot_key_ready(&g_app.store, 1) &&
+          ks0 != NULL && memcmp(ks0->privkey, p0, PK_PROTO_PRIVKEY_LEN) == 0 &&
+          ks1 != NULL && memcmp(ks1->privkey, p1, PK_PROTO_PRIVKEY_LEN) == 0,
+          "N13.7d: cold boot after rollback commit-fail window recovers VIN_A/p0 and VIN_B/p1");
+
+    /* N13.7e: Direct prepare defense-in-depth — even with an advancing generation,
+     * an unvalidated new-slot record ({key_valid=0, key_corrupted=0}) must not void
+     * a still-valid published slot on disk. */
+    {
+        pk_store_image_t forged = g_app.store.live;
+        forged.generation++;
+        forged.vehicles[1].key_valid = false;
+        forged.vehicles[1].key_corrupted = false;
+        check(port_nvs_ops()->prepare(NULL, &forged, sizeof(forged)) == PK_ERR_INVALID &&
+              stub_read_id_v1(&id) && id.image.vehicles[1].key_valid &&
+              !id.image.vehicles[1].key_corrupted,
+              "N13.7e: prepare rejects unvalidated new-slot payload over valid published slot even with advancing generation");
+    }
+}
+
+/* ==========================================================================
  * Entrypoint
  * ========================================================================== */
 
@@ -1149,6 +1354,7 @@ int main(void)
     test_n13_5c_candidate_steal_closed();
     test_n13_5d_leftover_retry_closed();
     test_n13_6_idv1_readback_consistency();
+    test_n13_7_double_fault_retry_semantics();
 
     printf("SUMMARY: %d PASS, %d FAIL\n", g_pass, g_fail);
     return (g_fail == 0) ? 0 : 1;

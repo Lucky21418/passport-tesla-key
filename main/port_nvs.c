@@ -470,6 +470,12 @@ static pk_err_t nvs_port_prepare(void *ctx, const void *image, size_t len)
     image_sanitize(img);
     if (img->generation == 0) {
         img->generation = has_pub ? (pub_blob.generation + 1u) : 1u;
+    } else if (has_pub && img->generation <= pub_blob.generation) {
+        /* Reject stale RAM snapshots (e.g. after a commit whose readback and
+         * rollback both failed, leaving a newer consistent id_v1 on disk) so
+         * a same-boot retry cannot void or overwrite the published record. */
+        nvs_close(h);
+        return PK_ERR_INVALID;
     }
 
     for (i = 0; i < PK_MAX_VEHICLES; i++) {
@@ -495,6 +501,14 @@ static pk_err_t nvs_port_prepare(void *ctx, const void *image, size_t len)
                 return PK_ERR_INVALID;
             }
             memcpy(img->vehicles[i].key_fp, pub_blob.image.vehicles[i].key_fp, PK_KEY_FP_LEN);
+            if (!img->vehicles[i].key_valid && !img->vehicles[i].key_corrupted &&
+                pub_blob.image.vehicles[i].key_valid &&
+                !pub_blob.image.vehicles[i].key_corrupted) {
+                /* Do not silently convert an unvalidated new-slot candidate
+                 * into a corrupted marker over a still-valid published slot. */
+                nvs_close(h);
+                return PK_ERR_INVALID;
+            }
             if (pub_blob.image.vehicles[i].key_corrupted ||
                 !pub_blob.image.vehicles[i].key_valid ||
                 img->vehicles[i].key_corrupted ||
