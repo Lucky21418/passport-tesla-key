@@ -111,6 +111,12 @@ static bool g_nvs_immediate_flash_on_set = true;
 static int  g_nvs_set_calls = 0;
 static int  g_nvs_fail_set_at = 0; /* 1-based; 0 = disabled */
 static bool g_nvs_fail_commit = false;
+static const char *g_nvs_corrupt_get_key = NULL;
+static int  g_nvs_corrupt_get_left = 0;
+static bool g_nvs_arm_corrupt_idv1_readback = false;
+static const char *g_nvs_fail_set_key = NULL;
+static int  g_nvs_fail_set_key_left = 0;
+static bool g_nvs_arm_fail_next_idv1_set = false;
 
 static void nvs_stub_reset(void)
 {
@@ -120,6 +126,12 @@ static void nvs_stub_reset(void)
     g_nvs_set_calls = 0;
     g_nvs_fail_set_at = 0;
     g_nvs_fail_commit = false;
+    g_nvs_corrupt_get_key = NULL;
+    g_nvs_corrupt_get_left = 0;
+    g_nvs_arm_corrupt_idv1_readback = false;
+    g_nvs_fail_set_key = NULL;
+    g_nvs_fail_set_key_left = 0;
+    g_nvs_arm_fail_next_idv1_set = false;
 }
 
 static void nvs_stub_power_cut(void)
@@ -128,6 +140,12 @@ static void nvs_stub_power_cut(void)
     g_nvs_work = g_nvs_flash;
     g_nvs_fail_set_at = 0;
     g_nvs_fail_commit = false;
+    g_nvs_corrupt_get_key = NULL;
+    g_nvs_corrupt_get_left = 0;
+    g_nvs_arm_corrupt_idv1_readback = false;
+    g_nvs_fail_set_key = NULL;
+    g_nvs_fail_set_key_left = 0;
+    g_nvs_arm_fail_next_idv1_set = false;
 }
 
 static stub_nvs_entry_t *nvs_find_entry(stub_nvs_table_t *tbl, const char *k, bool alloc)
@@ -187,6 +205,11 @@ esp_err_t nvs_get_blob(nvs_handle_t h, const char *k, void *out, size_t *len)
     }
     memcpy(out, e->data, e->len);
     *len = e->len;
+    if (g_nvs_corrupt_get_key && g_nvs_corrupt_get_left > 0 &&
+        strcmp(k, g_nvs_corrupt_get_key) == 0 && e->len > 0) {
+        ((uint8_t *)out)[0] ^= 0xFFu;
+        g_nvs_corrupt_get_left--;
+    }
     return ESP_OK;
 }
 
@@ -201,6 +224,11 @@ esp_err_t nvs_set_blob(nvs_handle_t h, const char *k, const void *val, size_t le
     if (g_nvs_fail_set_at > 0 && g_nvs_set_calls == g_nvs_fail_set_at) {
         return ESP_FAIL;
     }
+    if (g_nvs_fail_set_key && g_nvs_fail_set_key_left > 0 &&
+        strcmp(k, g_nvs_fail_set_key) == 0) {
+        g_nvs_fail_set_key_left--;
+        return ESP_FAIL;
+    }
     e = nvs_find_entry(&g_nvs_work, k, true);
     if (!e) {
         return ESP_FAIL;
@@ -209,6 +237,16 @@ esp_err_t nvs_set_blob(nvs_handle_t h, const char *k, const void *val, size_t le
     e->len = len;
     if (g_nvs_immediate_flash_on_set) {
         g_nvs_flash = g_nvs_work;
+    }
+    if (g_nvs_arm_corrupt_idv1_readback && strcmp(k, "id_v1") == 0) {
+        g_nvs_corrupt_get_key = "id_v1";
+        g_nvs_corrupt_get_left = 1;
+        g_nvs_arm_corrupt_idv1_readback = false;
+    }
+    if (g_nvs_arm_fail_next_idv1_set && strcmp(k, "id_v1") == 0) {
+        g_nvs_fail_set_key = "id_v1";
+        g_nvs_fail_set_key_left = 1;
+        g_nvs_arm_fail_next_idv1_set = false;
     }
     return ESP_OK;
 }
@@ -296,7 +334,7 @@ static bool dummy_ble_mtu(void *ctx, uint16_t *out)
     return true;
 }
 
-static void simulate_cold_boot_ex(int fail_set_at)
+static void simulate_cold_boot_ex(int fail_set_at, bool corrupt_idv1_readback)
 {
     pk_hal_t hal;
     pk_store_image_t recovered;
@@ -304,6 +342,7 @@ static void simulate_cold_boot_ex(int fail_set_at)
     nvs_stub_power_cut();
     g_nvs_set_calls = 0;
     g_nvs_fail_set_at = fail_set_at;
+    g_nvs_arm_corrupt_idv1_readback = corrupt_idv1_readback;
     memset(&g_app, 0, sizeof(g_app));
     memset(&g_ble, 0, sizeof(g_ble));
     memset(&recovered, 0, sizeof(recovered));
@@ -346,7 +385,7 @@ static void simulate_cold_boot_ex(int fail_set_at)
 
 static void simulate_cold_boot(void)
 {
-    simulate_cold_boot_ex(0);
+    simulate_cold_boot_ex(0, false);
 }
 
 /* Helper to read raw kslot_i record from simulated NVS */
@@ -620,7 +659,7 @@ static void test_n13_4a_legacy_v0_migration(void)
     /* Case 1: migration write of id_v1 fails -> legacy "live" preserved */
     nvs_stub_reset();
     seed_legacy_v0(priv0, pub0);
-    simulate_cold_boot_ex(1); /* fails id_v1 write inside migrate_legacy_v0_to_v1 */
+    simulate_cold_boot_ex(1, false); /* fails id_v1 write inside migrate_legacy_v0_to_v1 */
     (void)nvs_open("tesla_key", NVS_READONLY, &h);
     check(nvs_get_blob(h, "live", NULL, &sz) == ESP_OK &&
           nvs_get_blob(h, "id_v1", NULL, &sz) == ESP_ERR_NVS_NOT_FOUND,
@@ -882,6 +921,215 @@ static void test_n13_5d_leftover_retry_closed(void)
           "N13.5d [leftover_retry]: retry binds ONLY new candidate (has_key=1 priv_is_old=0 priv_is_new=1)");
 }
 
+/* Helper to inspect raw id_v1 envelope from simulated NVS */
+typedef struct {
+    uint32_t         magic;
+    uint16_t         version;
+    uint16_t         reserved;
+    uint32_t         crc32;
+    uint32_t         generation;
+    pk_store_image_t image;
+} test_id_v1_blob_t;
+
+static bool stub_read_id_v1(test_id_v1_blob_t *out)
+{
+    nvs_handle_t h = 0;
+    size_t sz = sizeof(*out);
+    (void)nvs_open("tesla_key", NVS_READONLY, &h);
+    return nvs_get_blob(h, "id_v1", out, &sz) == ESP_OK && sz == sizeof(*out);
+}
+
+static bool stub_id_v1_exists(void)
+{
+    nvs_handle_t h = 0;
+    size_t sz = 0;
+    (void)nvs_open("tesla_key", NVS_READONLY, &h);
+    return nvs_get_blob(h, "id_v1", NULL, &sz) == ESP_OK;
+}
+
+/* ==========================================================================
+ * N13.6: S4 id_v1 Post-Write Readback Mismatch Transactional Consistency
+ * ========================================================================== */
+
+static void test_n13_6_idv1_readback_consistency(void)
+{
+    uint8_t p0[PK_PROTO_PRIVKEY_LEN], u0[PK_PROTO_PUBKEY_LEN];
+    uint8_t p1[PK_PROTO_PRIVKEY_LEN], u1[PK_PROTO_PUBKEY_LEN];
+    uint8_t p2[PK_PROTO_PRIVKEY_LEN], u2[PK_PROTO_PUBKEY_LEN];
+    test_id_v1_blob_t id;
+    test_kslot_rec_t d1;
+    pk_proto_key_slot_t *ks0, *ks1;
+    pk_store_image_t live;
+    nvs_handle_t h = 0;
+    size_t sz = 0;
+
+    /* N13.6a: Add car 1 when car 0 exists; id_v1 write succeeds, readback mismatches.
+     * Expected: id_v1 rolls back to car-0-only prev_blob, kslot_1 is erased,
+     * disk is never (key_valid=1 && kslot erased), cold boot has 1 healthy car,
+     * and same-boot retry with VIN_C succeeds and binds only the new candidate. */
+    nvs_stub_reset();
+    simulate_cold_boot();
+    load_candidate_key(0x61, p0, u0);
+    check(pk_store_add_verified(&g_app.store, SYN_VIN_A, PK_STORE_CRASH_NONE),
+          "N13.6a: baseline add car 0");
+    check(pk_store_switch_current(&g_app.store, 0), "N13.6a: select car 0");
+
+    g_nvs_arm_corrupt_idv1_readback = true;
+    load_candidate_key(0x62, p1, u1);
+    check(!pk_store_add_verified(&g_app.store, SYN_VIN_B, PK_STORE_CRASH_NONE),
+          "N13.6a: add car 1 fails on id_v1 readback mismatch");
+    g_nvs_corrupt_get_key = NULL;
+
+    check(stub_read_id_v1(&id) &&
+          pk_store_count(&g_app.store) == 1 &&
+          id.image.vehicles[0].used && id.image.vehicles[0].key_valid &&
+          !id.image.vehicles[1].used && !id.image.vehicles[1].key_valid &&
+          !id.image.vehicles[1].key_corrupted &&
+          !stub_kslot_exists(1) &&
+          !(id.image.vehicles[1].key_valid && !stub_kslot_exists(1)),
+          "N13.6a: id_v1 rolled back to prev_blob and kslot_1 withdrawn (never key_valid=1 with erased kslot)");
+
+    /* Cold boot immediately after failed call: no ghost damaged slot 1 */
+    simulate_cold_boot();
+    ks0 = port_slot_keys(0);
+    check(pk_store_count(&g_app.store) == 1 &&
+          pk_store_slot_key_ready(&g_app.store, 0) &&
+          ks0 != NULL && memcmp(ks0->privkey, p0, PK_PROTO_PRIVKEY_LEN) == 0 &&
+          !pk_store_slot_used(&g_app.store, 1) && !stub_kslot_exists(1),
+          "N13.6a: cold boot immediately after readback failure recovers only healthy car 0");
+
+    /* Repeat N13.6a to verify same-boot retry + cold boot after retry */
+    nvs_stub_reset();
+    simulate_cold_boot();
+    load_candidate_key(0x61, p0, u0);
+    pk_store_add_verified(&g_app.store, SYN_VIN_A, PK_STORE_CRASH_NONE);
+    pk_store_switch_current(&g_app.store, 0);
+    g_nvs_arm_corrupt_idv1_readback = true;
+    load_candidate_key(0x62, p1, u1);
+    (void)pk_store_add_verified(&g_app.store, SYN_VIN_B, PK_STORE_CRASH_NONE);
+    g_nvs_corrupt_get_key = NULL;
+
+    load_candidate_key(0x63, p2, u2);
+    check(pk_store_add_verified(&g_app.store, SYN_VIN_C, PK_STORE_CRASH_NONE),
+          "N13.6a: same-boot retry with VIN_C succeeds after id_v1 rollback");
+    ks0 = port_slot_keys(0);
+    ks1 = port_slot_keys(1);
+    check(pk_store_count(&g_app.store) == 2 &&
+          pk_store_find_vin(&g_app.store, SYN_VIN_C) == 1 &&
+          ks0 != NULL && memcmp(ks0->privkey, p0, PK_PROTO_PRIVKEY_LEN) == 0 &&
+          ks1 != NULL && memcmp(ks1->privkey, p2, PK_PROTO_PRIVKEY_LEN) == 0 &&
+          memcmp(ks1->privkey, p1, PK_PROTO_PRIVKEY_LEN) != 0 &&
+          stub_read_kslot(1, &d1) && memcmp(d1.privkey, p2, PK_PROTO_PRIVKEY_LEN) == 0,
+          "N13.6a: same-boot retry binds ONLY new candidate p2 (not abandoned p1)");
+    simulate_cold_boot();
+    ks0 = port_slot_keys(0);
+    ks1 = port_slot_keys(1);
+    check(pk_store_count(&g_app.store) == 2 &&
+          pk_store_slot_key_ready(&g_app.store, 0) &&
+          pk_store_slot_key_ready(&g_app.store, 1) &&
+          ks0 != NULL && memcmp(ks0->privkey, p0, PK_PROTO_PRIVKEY_LEN) == 0 &&
+          ks1 != NULL && memcmp(ks1->privkey, p2, PK_PROTO_PRIVKEY_LEN) == 0,
+          "N13.6a: cold boot after retry keeps healthy car 0 (p0) and car 1 (p2)");
+
+    /* N13.6b: First car (no prior id_v1) — id_v1 readback mismatch erases id_v1 & kslot_0 */
+    nvs_stub_reset();
+    simulate_cold_boot();
+    g_nvs_arm_corrupt_idv1_readback = true;
+    load_candidate_key(0x64, p0, u0);
+    check(!pk_store_add_verified(&g_app.store, SYN_VIN_A, PK_STORE_CRASH_NONE),
+          "N13.6b: first-car add fails on id_v1 readback mismatch");
+    g_nvs_corrupt_get_key = NULL;
+    check(!stub_id_v1_exists() && !stub_kslot_exists(0) && pk_store_count(&g_app.store) == 0,
+          "N13.6b: first-car rollback erases both unverified id_v1 and kslot_0");
+    load_candidate_key(0x65, p1, u1);
+    check(pk_store_add_verified(&g_app.store, SYN_VIN_B, PK_STORE_CRASH_NONE) &&
+          port_slot_keys(0) != NULL &&
+          memcmp(port_slot_keys(0)->privkey, p1, PK_PROTO_PRIVKEY_LEN) == 0,
+          "N13.6b: same-boot retry after first-car rollback binds new candidate p1");
+
+    /* N13.6c: Double fault — id_v1 readback mismatch AND rollback write of prev_blob fails.
+     * Disk id_v1 still marks slot 1 key_valid=1, so kslot_1 MUST be preserved (never erased). */
+    nvs_stub_reset();
+    simulate_cold_boot();
+    load_candidate_key(0x66, p0, u0);
+    pk_store_add_verified(&g_app.store, SYN_VIN_A, PK_STORE_CRASH_NONE);
+    pk_store_switch_current(&g_app.store, 0);
+
+    g_nvs_arm_corrupt_idv1_readback = true;
+    g_nvs_arm_fail_next_idv1_set = true;
+    load_candidate_key(0x67, p1, u1);
+    check(!pk_store_add_verified(&g_app.store, SYN_VIN_B, PK_STORE_CRASH_NONE),
+          "N13.6c: double-fault (readback mismatch + rollback write fail) returns false");
+    g_nvs_corrupt_get_key = NULL;
+    g_nvs_fail_set_key = NULL;
+
+    check(stub_read_id_v1(&id) &&
+          id.image.vehicles[1].used && id.image.vehicles[1].key_valid &&
+          stub_read_kslot(1, &d1) &&
+          memcmp(d1.privkey, p1, PK_PROTO_PRIVKEY_LEN) == 0 &&
+          !(id.image.vehicles[1].key_valid && !stub_kslot_exists(1)),
+          "N13.6c: rollback-fail preserves kslot_1 matching on-disk id_v1 (never key_valid=1 with erased kslot)");
+
+    /* Same-boot retry for a different VIN fails closed (slot 1 on disk is VIN_B != VIN_C) */
+    load_candidate_key(0x68, p2, u2);
+    check(!pk_store_add_verified(&g_app.store, SYN_VIN_C, PK_STORE_CRASH_NONE) &&
+          pk_store_count(&g_app.store) == 1,
+          "N13.6c: same-boot retry with different VIN fails closed when rollback failed");
+
+    /* Cold boot recovers consistent (VIN_A/p0, VIN_B/p1) with zero damaged slots */
+    simulate_cold_boot();
+    ks0 = port_slot_keys(0);
+    ks1 = port_slot_keys(1);
+    check(pk_store_count(&g_app.store) == 2 &&
+          pk_store_slot_key_ready(&g_app.store, 0) &&
+          pk_store_slot_key_ready(&g_app.store, 1) &&
+          !pk_store_slot_key_corrupted(&g_app.store, 1) &&
+          ks0 != NULL && memcmp(ks0->privkey, p0, PK_PROTO_PRIVKEY_LEN) == 0 &&
+          ks1 != NULL && memcmp(ks1->privkey, p1, PK_PROTO_PRIVKEY_LEN) == 0,
+          "N13.6c: cold boot after rollback-fail recovers both cars intact with zero damaged slots");
+
+    /* N13.6d: Delete car 1 with id_v1 readback mismatch rolls back id_v1 so car 1 is not lost */
+    nvs_stub_reset();
+    simulate_cold_boot();
+    load_candidate_key(0x69, p0, u0);
+    pk_store_add_verified(&g_app.store, SYN_VIN_A, PK_STORE_CRASH_NONE);
+    pk_store_switch_current(&g_app.store, 0);
+    load_candidate_key(0x6A, p1, u1);
+    pk_store_add_verified(&g_app.store, SYN_VIN_B, PK_STORE_CRASH_NONE);
+
+    g_nvs_arm_corrupt_idv1_readback = true;
+    check(!pk_store_delete(&g_app.store, 1, false, PK_STORE_CRASH_NONE, &live),
+          "N13.6d: delete car 1 fails on id_v1 readback mismatch");
+    g_nvs_corrupt_get_key = NULL;
+    check(stub_read_id_v1(&id) && id.image.vehicles[1].used && id.image.vehicles[1].key_valid &&
+          stub_kslot_exists(1) && pk_store_count(&g_app.store) == 2,
+          "N13.6d: failed delete rolls back id_v1; car 1 remains on disk and in RAM");
+    simulate_cold_boot();
+    check(pk_store_count(&g_app.store) == 2 &&
+          pk_store_slot_key_ready(&g_app.store, 0) &&
+          pk_store_slot_key_ready(&g_app.store, 1),
+          "N13.6d: cold boot after failed delete recovers both cars intact");
+
+    /* N13.6e: Legacy v0->v1 migration with id_v1 readback mismatch erases unverified id_v1 */
+    make_synthetic_keypair(0x6B, p0, u0);
+    nvs_stub_reset();
+    seed_legacy_v0(p0, u0);
+    simulate_cold_boot_ex(0, true);
+    g_nvs_corrupt_get_key = NULL;
+    (void)nvs_open("tesla_key", NVS_READONLY, &h);
+    check(nvs_get_blob(h, "live", NULL, &sz) == ESP_OK &&
+          !stub_id_v1_exists(),
+          "N13.6e: failed v0->v1 migration readback preserves legacy live and erases unverified id_v1");
+    simulate_cold_boot();
+    ks0 = port_slot_keys(0);
+    check(pk_store_count(&g_app.store) == 1 &&
+          pk_store_slot_key_ready(&g_app.store, 0) &&
+          ks0 != NULL && memcmp(ks0->privkey, p0, PK_PROTO_PRIVKEY_LEN) == 0 &&
+          stub_id_v1_exists() &&
+          nvs_get_blob(h, "live", NULL, &sz) == ESP_ERR_NVS_NOT_FOUND,
+          "N13.6e: clean boot after migration readback failure migrates without key rotation");
+}
+
 /* ==========================================================================
  * Entrypoint
  * ========================================================================== */
@@ -900,6 +1148,7 @@ int main(void)
     test_n13_4d_and_5ab_tampered_key_rebind_closed();
     test_n13_5c_candidate_steal_closed();
     test_n13_5d_leftover_retry_closed();
+    test_n13_6_idv1_readback_consistency();
 
     printf("SUMMARY: %d PASS, %d FAIL\n", g_pass, g_fail);
     return (g_fail == 0) ? 0 : 1;

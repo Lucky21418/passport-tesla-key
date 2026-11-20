@@ -245,8 +245,14 @@ static void nvs_erase_slot_key(nvs_handle_t h, int slot)
     nvs_erase_key_ignore_missing(h, key_name);
 }
 
-static bool nvs_write_blob_verified(nvs_handle_t h, const char *key_name,
-                                    const nvs_id_v1_blob_t *blob)
+typedef enum {
+    NVS_WRITE_OK = 0,
+    NVS_WRITE_ERR_SET,
+    NVS_WRITE_ERR_READBACK
+} nvs_write_status_t;
+
+static nvs_write_status_t nvs_write_blob_verified(nvs_handle_t h, const char *key_name,
+                                                  const nvs_id_v1_blob_t *blob)
 {
     nvs_id_v1_blob_t rb;
     size_t rb_sz = sizeof(rb);
@@ -257,11 +263,14 @@ static bool nvs_write_blob_verified(nvs_handle_t h, const char *key_name,
         err = nvs_commit(h);
     }
     if (err != ESP_OK) {
-        return false;
+        return NVS_WRITE_ERR_SET;
     }
     memset(&rb, 0, sizeof(rb));
     err = nvs_get_blob(h, key_name, &rb, &rb_sz);
-    return (err == ESP_OK && rb_sz == sizeof(*blob) && memcmp(&rb, blob, sizeof(*blob)) == 0);
+    if (err == ESP_OK && rb_sz == sizeof(*blob) && memcmp(&rb, blob, sizeof(*blob)) == 0) {
+        return NVS_WRITE_OK;
+    }
+    return NVS_WRITE_ERR_READBACK;
 }
 
 static bool nvs_load_id_v1(nvs_handle_t h, nvs_id_v1_blob_t *out_blob)
@@ -279,6 +288,37 @@ static bool nvs_load_id_v1(nvs_handle_t h, nvs_id_v1_blob_t *out_blob)
         *out_blob = tmp;
     }
     return true;
+}
+
+/* Revert id_v1 to its pre-transaction state after a publish or readback failure.
+ * Returns true only when on-disk id_v1 is verified to match the pre-transaction
+ * state (previous valid blob, or absent if no previous id_v1 existed). */
+static bool nvs_rollback_id_v1(nvs_handle_t h, bool has_prev,
+                               const nvs_id_v1_blob_t *prev_blob)
+{
+    if (has_prev) {
+        if (!prev_blob) {
+            return false;
+        }
+        {
+            nvs_id_v1_blob_t cur;
+            if (nvs_load_id_v1(h, &cur) &&
+                memcmp(&cur, prev_blob, sizeof(cur)) == 0) {
+                return true;
+            }
+        }
+        return nvs_write_blob_verified(h, NVS_KEY_ID_V1, prev_blob) == NVS_WRITE_OK;
+    } else {
+        size_t probe_sz = 0;
+        if (nvs_get_blob(h, NVS_KEY_ID_V1, NULL, &probe_sz) == ESP_ERR_NVS_NOT_FOUND) {
+            return true;
+        }
+        nvs_erase_key_ignore_missing(h, NVS_KEY_ID_V1);
+        if (nvs_commit(h) != ESP_OK) {
+            return false;
+        }
+        return nvs_get_blob(h, NVS_KEY_ID_V1, NULL, &probe_sz) == ESP_ERR_NVS_NOT_FOUND;
+    }
 }
 
 static void image_sanitize(pk_store_image_t *img)
@@ -502,7 +542,7 @@ static pk_err_t nvs_port_prepare(void *ctx, const void *image, size_t len)
     cand_blob.generation = img->generation;
     cand_blob.crc32 = id_blob_crc(&cand_blob);
 
-    if (!nvs_write_blob_verified(h, NVS_KEY_ID_CAND, &cand_blob)) {
+    if (nvs_write_blob_verified(h, NVS_KEY_ID_CAND, &cand_blob) != NVS_WRITE_OK) {
         nvs_erase_key_ignore_missing(h, NVS_KEY_ID_CAND);
         (void)nvs_commit(h);
         nvs_close(h);
@@ -522,6 +562,8 @@ static pk_err_t nvs_port_prepare(void *ctx, const void *image, size_t len)
 static pk_err_t nvs_port_commit(void *ctx)
 {
     nvs_handle_t h;
+    nvs_id_v1_blob_t prev_blob;
+    bool has_prev = false;
     nvs_id_v1_blob_t cand_blob;
     size_t sz = sizeof(cand_blob);
     esp_err_t err;
@@ -547,6 +589,12 @@ static pk_err_t nvs_port_commit(void *ctx)
         tx_state_clear();
         return PK_ERR_INVALID;
     }
+
+    /* Snapshot the currently published id_v1 before mutating it so that a
+     * post-write readback mismatch can roll id_v1 back before withdrawing
+     * any new-slot key. */
+    memset(&prev_blob, 0, sizeof(prev_blob));
+    has_prev = nvs_load_id_v1(h, &prev_blob);
 
     /* Step 1: If this transaction adds a new slot, persist its candidate key
      * under kslot_<new_slot> before publishing id_v1. */
@@ -578,11 +626,18 @@ static pk_err_t nvs_port_commit(void *ctx)
     }
 
     /* Step 2: Publish single versioned identity record id_v1 + readback verify. */
-    if (!nvs_write_blob_verified(h, NVS_KEY_ID_V1, &cand_blob)) {
-        /* Rule 3: On publish failure, withdraw the unreferenced new-slot key
-         * not yet referenced by id_v1 so a same-boot retry cannot bind it. */
+    if (nvs_write_blob_verified(h, NVS_KEY_ID_V1, &cand_blob) != NVS_WRITE_OK) {
+        /* Roll back id_v1 to its pre-transaction state before withdrawing the
+         * new-slot key. Never erase kslot_<new_slot> while on-disk id_v1 may
+         * still mark that slot key_valid=1. */
+        bool id_v1_reverted = nvs_rollback_id_v1(h, has_prev, &prev_blob);
         if (wrote_new_slot_key) {
-            nvs_erase_slot_key(h, new_slot);
+            if (id_v1_reverted) {
+                nvs_erase_slot_key(h, new_slot);
+            } else {
+                ESP_LOGW(TAG, "id_v1 rollback failed; preserving kslot_%d for consistency",
+                         new_slot);
+            }
             key_slot_zeroize(&s_keys[new_slot]);
         }
         nvs_erase_key_ignore_missing(h, NVS_KEY_ID_CAND);
@@ -677,8 +732,11 @@ static bool migrate_legacy_v0_to_v1(nvs_handle_t h, nvs_id_v1_blob_t *out_blob)
     v1.generation = v1.image.generation;
     v1.crc32 = id_blob_crc(&v1);
 
-    /* Keep legacy "live" intact if writing id_v1 fails. */
-    if (!nvs_write_blob_verified(h, NVS_KEY_ID_V1, &v1)) {
+    /* Keep legacy "live" intact if writing or verifying id_v1 fails, and
+     * remove any unverified id_v1 blob written during this failed migration. */
+    if (nvs_write_blob_verified(h, NVS_KEY_ID_V1, &v1) != NVS_WRITE_OK) {
+        nvs_erase_key_ignore_missing(h, NVS_KEY_ID_V1);
+        (void)nvs_commit(h);
         return false;
     }
 
