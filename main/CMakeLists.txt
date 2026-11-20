@@ -1,16 +1,14 @@
 idf_component_register(
     SRCS "main.c"
-         "demo_navigation.c"
-         "ui_pixel.c"
-         "ui_pixel_math.c"
-         "demo_display.c"
-         "demo_button.c"
-         "demo_audio.c"
-         "demo_battery.c"
-         "demo_radio.c"
-         "demo_wifi.c"
-         "demo_ble.c"
-         "demo_low_power.c"
+         "app_ui.c"
+         "app_ui_pages.c"
+         "ui_widgets.c"
+         "app_font_cjk.c"
+         "app_ports.c"
+         "diag_log.c"
+         "port_nvs.c"
+         "port_wifi_portal.c"
+         "port_ble.c"
     INCLUDE_DIRS "."
-    REQUIRES bsp bt esp_event esp_hw_support esp_netif esp_timer esp_wifi nvs_flash
+    REQUIRES tesla_key bsp nvs_flash esp_partition esp_timer bt esp_wifi esp_http_server esp_netif esp_event driver esp_app_format
 )

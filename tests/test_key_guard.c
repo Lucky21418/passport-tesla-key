@@ -46,6 +46,30 @@ int main(void) {
     assert(key_guard_consume(&g, true, 2600));    // 松手撤防
     assert(!g.armed);
 
+    /* Stuck key: 10s boundary unchanged. Release asks the veto and does not
+     * deep-sleep by itself. Held states still pump events and suppress new edges. */
+    {
+        key_stuck_guard_t st = {0};
+        unsigned held;
+        unsigned released;
+        assert(key_stuck_update(&st, true, 1000, 10000) == KEY_STUCK_NONE);
+        assert(key_stuck_update(&st, true, 11000, 10000) == KEY_STUCK_NONE); /* exactly 10s */
+        assert(key_stuck_update(&st, true, 11001, 10000) == KEY_STUCK_ENTER);
+        held = key_stuck_loop_policy(KEY_STUCK_ENTER);
+        assert((held & KEY_STUCK_POLICY_PUMP) != 0);
+        assert((held & KEY_STUCK_POLICY_SUPPRESS_NEW) != 0);
+        assert((held & KEY_STUCK_POLICY_DIRECT_SLEEP) == 0);
+        assert(key_stuck_update(&st, true, 11200, 10000) == KEY_STUCK_WAITING);
+        assert(key_stuck_update(&st, false, 11300, 10000) == KEY_STUCK_RELEASED);
+        released = key_stuck_loop_policy(KEY_STUCK_RELEASED);
+        assert((released & KEY_STUCK_POLICY_PUMP) != 0);
+        assert((released & KEY_STUCK_POLICY_ASK_VETO) != 0);
+        assert((released & KEY_STUCK_POLICY_SUPPRESS_NEW) != 0);
+        assert((released & KEY_STUCK_POLICY_DIRECT_SLEEP) == 0);
+        assert(key_stuck_update(&st, false, 11400, 10000) == KEY_STUCK_NONE);
+        assert((key_stuck_loop_policy(KEY_STUCK_NONE) & KEY_STUCK_POLICY_DIRECT_SLEEP) == 0);
+    }
+
     puts("key wake guard state-machine tests: PASS");
     return 0;
 }

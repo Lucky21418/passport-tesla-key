@@ -1,0 +1,104 @@
+# VehicleData bounded subset options (official vehicle-command 0a582da4)
+# Unused telemetry submessages/fields are FT_IGNORE so pb_decode cleanly skips
+# them on the wire without adding RAM/stack bloat on ESP32-C3.
+
+# VehicleData: keep only the 5 approved sections
+CarServer.VehicleData.* type:FT_IGNORE
+CarServer.VehicleData.charge_state type:FT_STATIC
+CarServer.VehicleData.climate_state type:FT_STATIC
+CarServer.VehicleData.drive_state type:FT_STATIC
+CarServer.VehicleData.closures_state type:FT_STATIC
+CarServer.VehicleData.tire_pressure_state type:FT_STATIC
+
+# DriveState: keep shift_state, timestamp, optional_speed, optional_power, optional_speed_float
+CarServer.DriveState.* type:FT_IGNORE
+CarServer.DriveState.shift_state type:FT_STATIC
+CarServer.DriveState.timestamp type:FT_STATIC
+CarServer.DriveState.optional_speed type:FT_STATIC
+CarServer.DriveState.speed type:FT_STATIC
+CarServer.DriveState.optional_power type:FT_STATIC
+CarServer.DriveState.power type:FT_STATIC
+CarServer.DriveState.optional_speed_float type:FT_STATIC
+CarServer.DriveState.speed_float type:FT_STATIC
+
+# ClosuresState: keep door_open_*, locked, remote_start, sentry_mode_state, timestamp
+CarServer.ClosuresState.* type:FT_IGNORE
+CarServer.ClosuresState.optional_door_open_driver_front type:FT_STATIC
+CarServer.ClosuresState.door_open_driver_front type:FT_STATIC
+CarServer.ClosuresState.optional_door_open_driver_rear type:FT_STATIC
+CarServer.ClosuresState.door_open_driver_rear type:FT_STATIC
+CarServer.ClosuresState.optional_door_open_passenger_front type:FT_STATIC
+CarServer.ClosuresState.door_open_passenger_front type:FT_STATIC
+CarServer.ClosuresState.optional_door_open_passenger_rear type:FT_STATIC
+CarServer.ClosuresState.door_open_passenger_rear type:FT_STATIC
+CarServer.ClosuresState.optional_door_open_trunk_front type:FT_STATIC
+CarServer.ClosuresState.door_open_trunk_front type:FT_STATIC
+CarServer.ClosuresState.optional_door_open_trunk_rear type:FT_STATIC
+CarServer.ClosuresState.door_open_trunk_rear type:FT_STATIC
+CarServer.ClosuresState.optional_locked type:FT_STATIC
+CarServer.ClosuresState.locked type:FT_STATIC
+CarServer.ClosuresState.optional_remote_start type:FT_STATIC
+CarServer.ClosuresState.remote_start type:FT_STATIC
+CarServer.ClosuresState.sentry_mode_state type:FT_STATIC
+CarServer.ClosuresState.SentryModeState.* type:FT_STATIC
+CarServer.ClosuresState.timestamp type:FT_STATIC
+
+# ChargeState: keep approved status fields
+CarServer.ChargeState.* type:FT_IGNORE
+CarServer.ChargeState.charging_state type:FT_STATIC
+CarServer.ChargeState.ChargingState.* type:FT_STATIC
+CarServer.ChargeState.conn_charge_cable type:FT_STATIC
+CarServer.ChargeState.CableType.* type:FT_STATIC
+CarServer.ChargeState.timestamp type:FT_STATIC
+CarServer.ChargeState.optional_battery_range type:FT_STATIC
+CarServer.ChargeState.battery_range type:FT_STATIC
+CarServer.ChargeState.optional_battery_level type:FT_STATIC
+CarServer.ChargeState.battery_level type:FT_STATIC
+CarServer.ChargeState.optional_usable_battery_level type:FT_STATIC
+CarServer.ChargeState.usable_battery_level type:FT_STATIC
+CarServer.ChargeState.optional_minutes_to_full_charge type:FT_STATIC
+CarServer.ChargeState.minutes_to_full_charge type:FT_STATIC
+CarServer.ChargeState.optional_minutes_to_charge_limit type:FT_STATIC
+CarServer.ChargeState.minutes_to_charge_limit type:FT_STATIC
+CarServer.ChargeState.optional_charge_port_door_open type:FT_STATIC
+CarServer.ChargeState.charge_port_door_open type:FT_STATIC
+CarServer.ChargeState.optional_charge_current_request_max type:FT_STATIC
+CarServer.ChargeState.charge_current_request_max type:FT_STATIC
+CarServer.ChargeState.optional_charging_amps type:FT_STATIC
+CarServer.ChargeState.charging_amps type:FT_STATIC
+
+# ClimateState: keep approved status fields
+CarServer.ClimateState.* type:FT_IGNORE
+CarServer.ClimateState.timestamp type:FT_STATIC
+CarServer.ClimateState.defrost_mode type:FT_STATIC
+CarServer.ClimateState.DefrostMode.* type:FT_STATIC
+CarServer.ClimateState.optional_inside_temp_celsius type:FT_STATIC
+CarServer.ClimateState.inside_temp_celsius type:FT_STATIC
+CarServer.ClimateState.optional_outside_temp_celsius type:FT_STATIC
+CarServer.ClimateState.outside_temp_celsius type:FT_STATIC
+CarServer.ClimateState.optional_is_climate_on type:FT_STATIC
+CarServer.ClimateState.is_climate_on type:FT_STATIC
+CarServer.ClimateState.optional_seat_heater_left type:FT_STATIC
+CarServer.ClimateState.seat_heater_left type:FT_STATIC
+CarServer.ClimateState.optional_seat_heater_right type:FT_STATIC
+CarServer.ClimateState.seat_heater_right type:FT_STATIC
+CarServer.ClimateState.optional_seat_heater_rear_left type:FT_STATIC
+CarServer.ClimateState.seat_heater_rear_left type:FT_STATIC
+CarServer.ClimateState.optional_seat_heater_rear_right type:FT_STATIC
+CarServer.ClimateState.seat_heater_rear_right type:FT_STATIC
+CarServer.ClimateState.optional_steering_wheel_heater type:FT_STATIC
+CarServer.ClimateState.steering_wheel_heater type:FT_STATIC
+CarServer.ClimateState.optional_is_preconditioning type:FT_STATIC
+CarServer.ClimateState.is_preconditioning type:FT_STATIC
+
+# TirePressureState: keep timestamp + 4 pressure floats
+CarServer.TirePressureState.* type:FT_IGNORE
+CarServer.TirePressureState.timestamp type:FT_STATIC
+CarServer.TirePressureState.optional_tpms_pressure_fl type:FT_STATIC
+CarServer.TirePressureState.tpms_pressure_fl type:FT_STATIC
+CarServer.TirePressureState.optional_tpms_pressure_fr type:FT_STATIC
+CarServer.TirePressureState.tpms_pressure_fr type:FT_STATIC
+CarServer.TirePressureState.optional_tpms_pressure_rl type:FT_STATIC
+CarServer.TirePressureState.tpms_pressure_rl type:FT_STATIC
+CarServer.TirePressureState.optional_tpms_pressure_rr type:FT_STATIC
+CarServer.TirePressureState.tpms_pressure_rr type:FT_STATIC

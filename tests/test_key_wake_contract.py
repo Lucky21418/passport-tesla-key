@@ -34,13 +34,13 @@ class KeyWakeGuardWiringTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.main = read("main/main.c")
 
-    def test_on_key_consumes_the_guard_before_the_readiness_check(self) -> None:
-        # A release can arrive after the post-init voltage sample but before input
-        # dispatch is ready. on_key must run the guard first so that release still
-        # disarms it, instead of being discarded by the readiness early-return.
-        body = function_body(self.main, "on_key")
-        self.assertIn("key_guard_consume(", body)
-        self.assertLess(body.index("key_guard_consume("), body.index("!s_input_ready"))
+    def test_wake_guard_gates_button_polling_in_main_loop(self) -> None:
+        self.assertIn("bsp_button_init(NULL, NULL)", self.main)
+        guard_body = function_body(self.main, "poll_key_wake_guard")
+        self.assertIn("key_guard_consume(", guard_body)
+        main_body = function_body(self.main, "app_main")
+        self.assertLess(main_body.index("poll_key_wake_guard()"),
+                        main_body.index("pk_btn_adapter_feed_mv("))
 
 
 if __name__ == "__main__":

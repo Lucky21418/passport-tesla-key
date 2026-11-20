@@ -2,20 +2,32 @@
   <strong>简体中文</strong> · <a href="README.md">English</a>
 </p>
 
-# Fork 补充文档与素材目录（`docs/assets/`）
+# Fork 补充文档与素材登记目录（`docs/assets/`）
 
 ## 目录用途
 
-本目录用于存放 `feature/tesla-key` 分支下辅助根目录 [`README.zh_CN.md`](../../README.zh_CN.md) 的 fork 专属补充文档、架构说明、产品设计规范与文档配图。
+本目录用于存放 `feature/tesla-key` 分支下辅助根目录 [`README.zh_CN.md`](../../README.zh_CN.md) 的 fork 专属补充文档、架构说明与素材许可登记记录。
 
 ## 目录结构约定
 
 - 维护中的 Markdown 文档遵循双语配对规则：默认英文路径 `<name>.md` 与简体中文配对路径 `<name>.zh_CN.md`，并在顶部保留双向语言切换链接。
-- 固件编译复用的二进制资源（字体、图片、音频）存放在仓库根目录 [`assets/`](../../assets/README.zh_CN.md)，不放在 `docs/assets/`。
+- 固件编译复用的二进制资源存放在仓库根目录 [`assets/`](../../assets/README.zh_CN.md)，不放在 `docs/assets/`。
 
-## AI 使用方法
+## M2 素材与第三方材料登记表（Gate-B / P2 裁决）
 
-在 `feature/tesla-key` 分支开展工作时，先从 [`AGENTS.zh_CN.md`](../../AGENTS.zh_CN.md) 进入，结合本分支根目录 [`README.zh_CN.md`](../../README.zh_CN.md)、上游 [`docs/README.zh_CN.md`](../README.zh_CN.md) 以及本目录下的补充说明理解项目背景。
+依据父级裁决 P2 与 [`assets/README.zh_CN.md`](../../assets/README.zh_CN.md)，凡再分发许可链未闭环的素材严禁进入本仓库：
+
+| 类别 | 路径 / 位置 | 来源与版本 / Commit | 许可证 | 在 `feature/tesla-key` 中的状态 |
+| --- | --- | --- | --- | --- |
+| **已剥离的旧树图标与 QR 位图** | *已移除*（不迁入 `main/app_icons.c`） | 旧树 31 枚 20×20 单色图标与 58×58 QR 位图 | 再分发许可链未闭环 | **已在 M2 全部剥离（P2 方案①）**。由 [`main/ui_widgets.c`](../../main/ui_widgets.c) 与 [`main/app_icons.h`](../../main/app_icons.h) 中的纯文本/已许可符号标签替代。 |
+| **Tesla BLE 协议 Schema** | [`components/tesla_key/proto/schema/`](../../components/tesla_key/proto/schema/LICENSE) | `teslamotors/vehicle-command` @ `0a582da430c4aca6d397fb6cbed5b4d6bb380125` | MIT 许可证（随附于 `components/tesla_key/proto/schema/LICENSE`） | **保留并登记**。通过 [`tools/gen_tesla_proto.sh`](../../tools/gen_tesla_proto.sh) 校验一致性。 |
+| **nanopb 运行时与生成配置** | [`components/tesla_key/proto/nanopb/`](../../components/tesla_key/proto/nanopb/LICENSE.txt) | `nanopb` `0.4.9.1`（锁定 `protobuf==5.28.3`、`grpcio-tools==1.68.0`） | zlib 许可证（随附于 `components/tesla_key/proto/nanopb/LICENSE.txt`） | **保留并登记**。通过 `car_server.options` 保留 `oneof` 速度字段真实存在性（presence）。 |
+| **应用中文字库位图子集** | [`main/app_font_cjk.c`](../../main/app_font_cjk.c)、[`tools/gen_cjk_font.py`](../../tools/gen_cjk_font.py) | 459 字形 4-bpp 未压缩 LVGL 位图字库子集（12 px 与 16 px），覆盖固定 UI 与 [`pk_copy.c`](../../components/tesla_key/src/pk_copy.c) 文案 | 项目生成字库子集；由 `tests/test_ui_text_widths.py` 校验 | **保留并登记**。100% 覆盖应用层全部字符且不修改 LVGL 只读字体描述符。 |
+| **官方电芯电量计参数** | [`assets/battery/wanli-500mah-profile2-xil40x-20261020.txt`](../../assets/battery/wanli-500mah-profile2-xil40x-20261020.txt) | 官方上游万锂新能源 500 mAh CW2017 参数文件 | 上游项目提供数据文件 | **与 `upstream/main` 保持一致，未作任何改动**（P5 裁决）。 |
+
+## 自定义分区与烧录政策摘要
+
+`feature/tesla-key` 分支在 8 MB Flash 边界内配置了 `nvs`（`0x9000`）、`phy_init`（`0xF000`）、`factory`（`0x10000`，大小 `0x7B0000`）以及 256 KB 的 `bblog` 数据分区（`0x7C0000`–`0x800000`）。该布局通过 `./tools/validate.sh --firmware` 强制校验，仅属本分支应用设计，不构成通用模板强制要求。完整的烧录与已存数据政策请参见 [`docs/development/engineering/firmware-layout.zh_CN.md`](../development/engineering/firmware-layout.zh_CN.md#烧录与已存数据)。
 
 ## 边界
 

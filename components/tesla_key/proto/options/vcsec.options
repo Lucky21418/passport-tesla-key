@@ -1,0 +1,7 @@
+# VCSEC bounded options (official vehicle-command 0a582da4)
+VCSEC.SignedMessage.protobufMessageAsBytes max_size:256
+VCSEC.KeyIdentifier.publicKeySHA1 max_size:20
+VCSEC.PublicKey.PublicKeyRaw max_size:65
+VCSEC.InformationRequest.publicKey max_size:65
+VCSEC.WhitelistInfo.whitelistEntries type:FT_IGNORE
+VCSEC.FromVCSECMessage.nominalError max_size:64

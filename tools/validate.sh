@@ -127,6 +127,48 @@ run_static_checks() {
     PYTHONDONTWRITEBYTECODE=1 python3 tests/test_verify_firmware.py
     PYTHONDONTWRITEBYTECODE=1 python3 tests/test_archive_firmware.py
     PYTHONDONTWRITEBYTECODE=1 python3 tests/test_install_passport_skills.py
+    PYTHONDONTWRITEBYTECODE=1 python3 tests/test_ui_text_widths.py
+    PYTHONDONTWRITEBYTECODE=1 python3 tests/test_diag_analyze.py
+    local -a tesla_key_inc=(
+        -Icomponents/tesla_key/include
+        -Icomponents/tesla_key/proto/nanopb
+        -Icomponents/tesla_key/proto/generated
+    )
+    local -a tesla_key_srcs=(
+        components/tesla_key/src/*.c
+        components/tesla_key/proto/nanopb/*.c
+        components/tesla_key/proto/generated/*.pb.c
+        components/tesla_key/proto/generated/google/protobuf/timestamp.pb.c
+    )
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror "${tesla_key_inc[@]}" \
+        tests/test_tesla_key_contract.c "${tesla_key_srcs[@]}" -lm \
+        -o "${test_dir}/test_tesla_key_contract"
+    "${test_dir}/test_tesla_key_contract"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror "${tesla_key_inc[@]}" \
+        tests/test_transport_framing.c "${tesla_key_srcs[@]}" -lm \
+        -o "${test_dir}/test_transport_framing"
+    "${test_dir}/test_transport_framing"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror "${tesla_key_inc[@]}" \
+        tests/test_wake_only_cycle.c "${tesla_key_srcs[@]}" -lm \
+        -o "${test_dir}/test_wake_only_cycle"
+    "${test_dir}/test_wake_only_cycle"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror "${tesla_key_inc[@]}" \
+        tests/test_settings_toggle.c "${tesla_key_srcs[@]}" -lm \
+        -o "${test_dir}/test_settings_toggle"
+    "${test_dir}/test_settings_toggle"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -DPK_HOST_TEST_RNG_INJECT "${tesla_key_inc[@]}" \
+        tests/test_s2_proto_kernel.c "${tesla_key_srcs[@]}" -lm \
+        -o "${test_dir}/test_s2_proto_kernel"
+    "${test_dir}/test_s2_proto_kernel"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -DPK_HOST_TEST_RNG_INJECT \
+        -Itests/port_ble_stubs -Imain "${tesla_key_inc[@]}" \
+        tests/test_s2_port_ble_adapter.c main/port_nvs.c "${tesla_key_srcs[@]}" -lm \
+        -o "${test_dir}/test_s2_port_ble_adapter"
+    "${test_dir}/test_s2_port_ble_adapter"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain "${tesla_key_inc[@]}" \
+        tests/test_s3_orchestrator.c "${tesla_key_srcs[@]}" -lm \
+        -o "${test_dir}/test_s3_orchestrator"
+    "${test_dir}/test_s3_orchestrator"
     rm -rf "${test_dir}"
     echo "Host tests: PASS"
     if [[ "${actionlint_skipped}" == 1 ]]; then

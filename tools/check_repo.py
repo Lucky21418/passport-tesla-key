@@ -26,6 +26,14 @@ SECRET_PATTERNS = {
     "AWS access key": re.compile(r"AKIA[0-9A-Z]{16}"),
     "private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 }
+TESLA_VIN_RE = re.compile(r"\b(?:5YJ|7SA|LRW|XP7)[A-HJ-NPR-Z0-9]{14}\b")
+SYNTHETIC_TEST_VINS = {
+    "5YJ3E1EA1PF000001",
+    "5YJS0000000000000",
+    "5YJSA1E26HF000337",
+    # Published example VIN from teslamotors/vehicle-command protocol.md test vectors.
+    "5YJ30123456789ABC",
+}
 ROOT_MARKDOWN_ALLOWLIST = {
     "AGENTS.md",
     "AGENTS.zh_CN.md",
@@ -377,6 +385,10 @@ def check_sensitive_content(files: list[Path], errors: list[str]) -> None:
         for match in re.finditer(r"https://ai-passport\.folotoy\.cn/trae/\?s=([^&\s)]+)&k=([^\s)]+)", text):
             if "<" not in match.group(1) and "AAAAAA" not in match.group(1):
                 errors.append(f"{path.relative_to(ROOT).as_posix()}: possible unsanitized device QR link")
+
+        for match in TESLA_VIN_RE.finditer(text):
+            if match.group(0) not in SYNTHETIC_TEST_VINS:
+                errors.append(f"{path.relative_to(ROOT).as_posix()}: possible Tesla VIN")
 
 
 def check_conflict_markers(files: list[Path], errors: list[str]) -> None:

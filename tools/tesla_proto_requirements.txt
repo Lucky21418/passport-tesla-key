@@ -1,0 +1,8 @@
+# Pinned generator dependencies for tools/gen_tesla_proto.sh.
+# protobuf 7.x / newer grpcio-tools changes comments in the bundled
+# google/protobuf/timestamp.proto only; Tesla schemas are unchanged.
+# Install into a local virtualenv and set NANOPB_PYTHON to its python3 binary.
+grpcio==1.68.0
+grpcio-tools==1.68.0
+protobuf==5.28.3
+nanopb==0.4.9.1

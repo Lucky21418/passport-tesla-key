@@ -41,3 +41,62 @@ static inline bool key_guard_consume(key_guard_t *g, bool is_release, int64_t no
 static inline void key_guard_sync_released(key_guard_t *g, bool released) {
     if (released) g->armed = false;
 }
+
+typedef enum {
+    KEY_STUCK_NONE = 0,
+    KEY_STUCK_ENTER,       /* just crossed >10s threshold: stop BLE scan + screen off */
+    KEY_STUCK_WAITING,     /* still held: stay low-power waiting for release */
+    KEY_STUCK_RELEASED     /* released after stuck: ask the unified sleep veto */
+} key_stuck_action_t;
+
+enum {
+    KEY_STUCK_POLICY_PUMP = 1u,
+    KEY_STUCK_POLICY_SUPPRESS_NEW = 2u,
+    KEY_STUCK_POLICY_ASK_VETO = 4u,
+    KEY_STUCK_POLICY_DIRECT_SLEEP = 8u
+};
+
+/* Stuck-key policy. Events and deadlines still run. Release never deep-sleeps
+ * by itself; the existing pk_app_should_deep_sleep veto decides. */
+static inline unsigned key_stuck_loop_policy(key_stuck_action_t act) {
+    switch (act) {
+    case KEY_STUCK_ENTER:
+    case KEY_STUCK_WAITING:
+        return KEY_STUCK_POLICY_PUMP | KEY_STUCK_POLICY_SUPPRESS_NEW;
+    case KEY_STUCK_RELEASED:
+        return KEY_STUCK_POLICY_PUMP | KEY_STUCK_POLICY_ASK_VETO |
+               KEY_STUCK_POLICY_SUPPRESS_NEW;
+    case KEY_STUCK_NONE:
+    default:
+        return KEY_STUCK_POLICY_PUMP | KEY_STUCK_POLICY_ASK_VETO;
+    }
+}
+
+typedef struct {
+    bool     tracking;
+    bool     stuck;
+    uint32_t press_start_ms;
+} key_stuck_guard_t;
+
+static inline key_stuck_action_t key_stuck_update(key_stuck_guard_t *s, bool pressed,
+                                                  uint32_t now_ms, uint32_t threshold_ms) {
+    if (!s) return KEY_STUCK_NONE;
+    if (pressed) {
+        if (!s->tracking) {
+            s->tracking = true;
+            s->press_start_ms = now_ms;
+            return KEY_STUCK_NONE;
+        }
+        if (!s->stuck && (uint32_t)(now_ms - s->press_start_ms) > threshold_ms) {
+            s->stuck = true;
+            return KEY_STUCK_ENTER;
+        }
+        return s->stuck ? KEY_STUCK_WAITING : KEY_STUCK_NONE;
+    }
+    s->tracking = false;
+    if (s->stuck) {
+        s->stuck = false;
+        return KEY_STUCK_RELEASED;
+    }
+    return KEY_STUCK_NONE;
+}

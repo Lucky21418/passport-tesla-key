@@ -1,0 +1,32 @@
+# CarServer bounded subset options (official vehicle-command 0a582da4)
+CarServer.ResultReason.plain_text max_size:64
+CarServer.HvacSeatHeaterActions.hvacSeatHeaterAction max_count:1
+CarServer.HvacSetPreconditioningMaxAction.manual_override_mode type:FT_IGNORE
+
+# Response: keep actionStatus + vehicleData; ignore unused arms
+CarServer.Response.getSessionInfoResponse type:FT_IGNORE
+CarServer.Response.getNearbyChargingSites type:FT_IGNORE
+CarServer.Response.ping type:FT_IGNORE
+
+# VehicleAction: keep vehicle_action_msg oneof + approved action arms only
+CarServer.VehicleAction.* type:FT_IGNORE
+CarServer.VehicleAction.vehicle_action_msg type:FT_STATIC
+CarServer.VehicleAction.getVehicleData type:FT_STATIC
+CarServer.VehicleAction.hvacAutoAction type:FT_STATIC
+CarServer.VehicleAction.hvacSetPreconditioningMaxAction type:FT_STATIC
+CarServer.VehicleAction.hvacSteeringWheelHeaterAction type:FT_STATIC
+CarServer.VehicleAction.vehicleControlFlashLightsAction type:FT_STATIC
+CarServer.VehicleAction.vehicleControlHonkHornAction type:FT_STATIC
+CarServer.VehicleAction.vehicleControlSetSentryModeAction type:FT_STATIC
+CarServer.VehicleAction.vehicleControlWindowAction type:FT_STATIC
+CarServer.VehicleAction.hvacSeatHeaterActions type:FT_STATIC
+CarServer.VehicleAction.chargePortDoorClose type:FT_STATIC
+CarServer.VehicleAction.chargePortDoorOpen type:FT_STATIC
+
+# GetVehicleData: keep only the 5 approved sections
+CarServer.GetVehicleData.* type:FT_IGNORE
+CarServer.GetVehicleData.getChargeState type:FT_STATIC
+CarServer.GetVehicleData.getClimateState type:FT_STATIC
+CarServer.GetVehicleData.getDriveState type:FT_STATIC
+CarServer.GetVehicleData.getClosuresState type:FT_STATIC
+CarServer.GetVehicleData.getTirePressureState type:FT_STATIC
