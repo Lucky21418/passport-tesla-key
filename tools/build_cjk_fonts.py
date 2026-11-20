@@ -101,11 +101,19 @@ def sanitize_generated_header(
             break
 
     sanitized = "".join(lines)
-    forbidden = ["/Users/", "/home/", "/tmp/", str(REPO_ROOT)]
+    header_window = "".join(lines[:15])
+    for flag in ("--font", "--output"):
+        match = re.search(rf"{flag}\s+(\S+)", header_window)
+        if match:
+            val = match.group(1)
+            if os.path.isabs(val) or val.startswith("~") or re.match(r"^[A-Za-z]:[\\/]", val):
+                raise SystemExit(
+                    f"ERROR: absolute/host path {val!r} remained in {out_path.relative_to(REPO_ROOT)}"
+                )
+    forbidden = [str(REPO_ROOT)]
     home_dir = os.environ.get("HOME")
     if home_dir:
         forbidden.append(home_dir)
-    header_window = "".join(lines[:15])
     for marker in forbidden:
         if marker and marker in header_window:
             raise SystemExit(
