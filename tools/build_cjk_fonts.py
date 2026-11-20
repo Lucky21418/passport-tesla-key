@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -81,6 +83,37 @@ def verify_converter(lv_font_conv: str) -> None:
         )
 
 
+def sanitize_generated_header(
+    out_path: pathlib.Path,
+    source_font_arg: str,
+    source_font_name: str,
+    rel_out_path: str,
+) -> None:
+    """Replace host-specific paths in lv_font_conv's Opts comment with neutral paths."""
+    content = out_path.read_text(encoding="utf-8")
+    lines = content.splitlines(keepends=True)
+    for idx, line in enumerate(lines[:10]):
+        if line.startswith(" * Opts:"):
+            updated = line.replace(f"--font {source_font_arg}", f"--font {source_font_name}")
+            updated = re.sub(r"--font\s+\S+", f"--font {source_font_name}", updated, count=1)
+            updated = re.sub(r"--output\s+\S+", f"--output {rel_out_path}", updated, count=1)
+            lines[idx] = updated
+            break
+
+    sanitized = "".join(lines)
+    forbidden = ["/Users/", "/home/", "/tmp/", str(REPO_ROOT)]
+    home_dir = os.environ.get("HOME")
+    if home_dir:
+        forbidden.append(home_dir)
+    header_window = "".join(lines[:15])
+    for marker in forbidden:
+        if marker and marker in header_window:
+            raise SystemExit(
+                f"ERROR: host-specific path {marker!r} remained in {out_path.relative_to(REPO_ROOT)}"
+            )
+    out_path.write_text(sanitized, encoding="utf-8")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build 12/16 px Source Han Sans SC LVGL fonts.")
     parser.add_argument(
@@ -126,6 +159,7 @@ def main() -> int:
         inventory = CHARS_FILE.read_text(encoding="utf-8").rstrip("\r\n")
 
     for size, font_name, out_path in TARGETS:
+        rel_out = out_path.relative_to(REPO_ROOT).as_posix()
         cmd = [
             args.lv_font_conv,
             "--font",
@@ -144,10 +178,11 @@ def main() -> int:
             "--lv-include",
             "lvgl.h",
             "--output",
-            str(out_path),
+            rel_out,
         ]
-        subprocess.run(cmd, check=True)
-        print(f"Generated {out_path.relative_to(REPO_ROOT)} ({size} px, {len(inventory)} glyphs)")
+        subprocess.run(cmd, cwd=REPO_ROOT, check=True)
+        sanitize_generated_header(out_path, str(args.font), args.font.name, rel_out)
+        print(f"Generated {rel_out} ({size} px, {len(inventory)} glyphs)")
 
     return 0
 

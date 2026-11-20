@@ -1,0 +1,9 @@
+/* Optional local development VIN preset.
+ *
+ * Copy this file to main/dev_vin.h (which is git-ignored) and replace the
+ * placeholder below with your 17-character vehicle VIN before building.
+ * Never commit main/dev_vin.h or any real VIN to the repository.
+ */
+#pragma once
+
+#define DEV_VIN "REPLACE_WITH_YOUR_17_CHAR_VIN"

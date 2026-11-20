@@ -5,6 +5,9 @@ managed_components/
 .vscode/
 .idea/
 
+# Optional local development VIN preset (never commit a real VIN).
+main/dev_vin.h
+
 # Generated repository-local links; canonical skill sources live in skills/.
 /.agents/skills/passport-develop
 /.agents/skills/passport-setup
