@@ -388,7 +388,7 @@ static void send_domain_session_request(int slot, pk_proto_domain_t domain)
     uint32_t conn_gen = 0;
     pk_ms_t now = port_now_ms();
 
-    if (!ks) {
+    if (!ks || !ks->has_keypair || ks->pubkey[0] != 0x04u) {
         return;
     }
     if (!pk_proto_random_bytes(addr, sizeof(addr)) ||
@@ -417,11 +417,12 @@ static void request_session_if_idle(int slot, pk_proto_domain_t domain)
     /* protocol.md "Caching session state": if a domain session is still valid
      * after a BLE reconnect, reuse it and skip the SessionInfo handshake. A
      * stale session (vehicle rebooted) is recovered from the auth fault path. */
-    if (ks) {
-        sess = (domain == PK_PROTO_DOMAIN_VEHICLE_SECURITY)
-                   ? &ks->vcsec
-                   : &ks->infotainment;
+    if (!ks || !ks->has_keypair || ks->pubkey[0] != 0x04u) {
+        return;
     }
+    sess = (domain == PK_PROTO_DOMAIN_VEHICLE_SECURITY)
+               ? &ks->vcsec
+               : &ks->infotainment;
     if (sess && sess->valid) {
         return;
     }

@@ -103,6 +103,37 @@ bool pk_store_slot_used(const pk_store_t *s, int slot)
     return s->live.vehicles[slot].used;
 }
 
+bool pk_store_slot_key_ready(const pk_store_t *s, int slot)
+{
+    if (!pk_store_slot_used(s, slot)) {
+        return false;
+    }
+    if (!s->physical_nvs_attached) {
+        return !s->live.vehicles[slot].key_corrupted;
+    }
+    return s->live.vehicles[slot].key_valid && !s->live.vehicles[slot].key_corrupted;
+}
+
+bool pk_store_slot_key_corrupted(const pk_store_t *s, int slot)
+{
+    if (!pk_store_slot_used(s, slot)) {
+        return false;
+    }
+    return s->live.vehicles[slot].key_corrupted;
+}
+
+static void store_sync_from_nvs(pk_store_t *s, const pk_store_image_t *fallback)
+{
+    if (s->nvs && s->nvs->recover) {
+        pk_store_image_t rec;
+        if (s->nvs->recover(s->nvs_ctx, &rec, sizeof(rec)) == PK_OK) {
+            s->live = rec;
+            return;
+        }
+    }
+    s->live = *fallback;
+}
+
 const pk_vehicle_rec_t *pk_store_get(const pk_store_t *s, int slot)
 {
     if (!pk_store_slot_used(s, slot)) {
@@ -158,10 +189,14 @@ bool pk_store_add_verified(pk_store_t *s, const char *vin, pk_store_crash_t cras
     }
     memset(&cand.vehicles[slot], 0, sizeof(cand.vehicles[slot]));
     cand.vehicles[slot].used = true;
+    cand.vehicles[slot].key_valid = !s->physical_nvs_attached;
+    cand.vehicles[slot].key_corrupted = false;
+    cand.tombstones &= (uint8_t)~(1u << slot);
     strncpy(cand.vehicles[slot].vin, vin, PK_VIN_LEN);
     cand.vehicles[slot].vin[PK_VIN_LEN] = '\0';
-    /* Per-car isolated key reference. This is a stub handle, not a real key.
-     * Production must generate a key per car; do not share leftover material.
+    /* Per-car isolated key reference. When physical NVS is attached, the NVS
+     * port binds this new slot exclusively to this transaction's candidate key
+     * and records its SHA-256 public-key fingerprint in id_v1.
      */
     snprintf(cand.vehicles[slot].slot_id, sizeof(cand.vehicles[slot].slot_id), "car%d", slot);
     snprintf(cand.vehicles[slot].key_ref, sizeof(cand.vehicles[slot].key_ref), "wrapped-%d", slot);
@@ -190,7 +225,11 @@ bool pk_store_add_verified(pk_store_t *s, const char *vin, pk_store_crash_t cras
             return false;
         }
     }
-    s->live = cand;
+    if (crash == PK_STORE_CRASH_COMMIT) {
+        s->live = cand;
+    } else {
+        store_sync_from_nvs(s, &cand);
+    }
     s->committed = true;
     s->journal_valid = false;
     return true;
@@ -212,10 +251,8 @@ bool pk_store_delete(pk_store_t *s, int target, bool reset, pk_store_crash_t cra
             continue;
         }
         if (reset || i == target) {
-            /* Isolated key_ref is dropped with the record. A later physical
-             * port must refcount shared wraps and must not claim cryptographic
-             * erase has occurred.
-             */
+            /* Mark slot tombstoned so NVS GC erases its unreferenced slot key. */
+            next.tombstones |= (uint8_t)(1u << i);
             memset(&next.vehicles[i], 0, sizeof(next.vehicles[i]));
         }
     }
@@ -258,16 +295,18 @@ bool pk_store_delete(pk_store_t *s, int target, bool reset, pk_store_crash_t cra
             return false;
         }
     }
-    s->live = next;
-    s->committed = true;
     if (crash == PK_STORE_CRASH_COMMIT) {
         /* After commit, the new image wins; tombstoned items stay gone. */
+        s->live = next;
+        s->committed = true;
         s->journal_valid = false;
         if (out_live) {
             *out_live = s->live;
         }
         return true;
     }
+    store_sync_from_nvs(s, &next);
+    s->committed = true;
     s->journal_valid = false;
     if (out_live) {
         *out_live = s->live;
@@ -292,7 +331,34 @@ bool pk_store_switch_current(pk_store_t *s, int slot)
             return false;
         }
     }
-    s->live = next;
+    store_sync_from_nvs(s, &next);
+    return true;
+}
+
+bool pk_store_save_prefs(pk_store_t *s, int brightness, pk_power_profile_t power)
+{
+    pk_store_image_t next;
+
+    if (!s) {
+        return false;
+    }
+    if (brightness < PK_BRIGHTNESS_MIN || brightness > PK_BRIGHTNESS_MAX) {
+        return false;
+    }
+    if (power != PK_POWER_COMFORT && power != PK_POWER_ENDURANCE) {
+        return false;
+    }
+    next = s->live;
+    next.brightness = brightness;
+    next.power = power;
+    next.generation++;
+    if (s->nvs && s->nvs->prepare && s->nvs->commit) {
+        if (s->nvs->prepare(s->nvs_ctx, &next, sizeof(next)) != PK_OK ||
+            s->nvs->commit(s->nvs_ctx) != PK_OK) {
+            return false;
+        }
+    }
+    store_sync_from_nvs(s, &next);
     return true;
 }
 

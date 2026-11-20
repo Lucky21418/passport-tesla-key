@@ -169,6 +169,11 @@ run_static_checks() {
         tests/test_s3_orchestrator.c "${tesla_key_srcs[@]}" -lm \
         -o "${test_dir}/test_s3_orchestrator"
     "${test_dir}/test_s3_orchestrator"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -DPK_HOST_TEST_RNG_INJECT -DPK_NVS_STUB_EXTERN \
+        -Itests/port_ble_stubs -Imain "${tesla_key_inc[@]}" \
+        tests/test_s4_identity_store.c main/port_nvs.c "${tesla_key_srcs[@]}" -lm \
+        -o "${test_dir}/test_s4_identity_store"
+    "${test_dir}/test_s4_identity_store"
     rm -rf "${test_dir}"
     echo "Host tests: PASS"
     if [[ "${actionlint_skipped}" == 1 ]]; then

@@ -135,8 +135,8 @@ bool pk_app_enter_vin(pk_app_t *app)
         existing = pk_store_find_vin(&app->store, app->vin);
         if (existing != PK_VEHICLE_NONE) {
             app->vehicle = existing;
-            app->paired = true;
             (void)pk_store_switch_current(&app->store, existing);
+            app->paired = pk_store_slot_key_ready(&app->store, existing);
             app->page = PK_PAGE_CARS;
             return true;
         }
@@ -334,7 +334,7 @@ bool pk_app_pair_verify(pk_app_t *app, const pk_pair_verify_t *v)
             if (new_slot >= 0 && new_slot < PK_MAX_VEHICLES) {
                 (void)pk_store_switch_current(&app->store, new_slot);
                 app->vehicle = new_slot;
-                app->paired = true;
+                app->paired = pk_store_slot_key_ready(&app->store, new_slot);
                 app->car_focus = new_slot;
             }
         }
@@ -408,7 +408,7 @@ bool pk_app_select_vehicle(pk_app_t *app, int vehicle)
     app->connection++;
     app->session++;
     app->vehicle = vehicle;
-    app->paired = pk_store_slot_used(&app->store, vehicle);
+    app->paired = pk_store_slot_key_ready(&app->store, vehicle);
     app->auth = PK_MSG_AUTH_UNCONFIRMED;
     app->page = PK_PAGE_MAIN;
     return true;
@@ -451,7 +451,8 @@ bool pk_app_delete_vehicle(pk_app_t *app, int target, bool reset, pk_store_crash
             app->session++;
             app->auth = PK_MSG_AUTH_UNCONFIRMED;
             app->page = PK_PAGE_MAIN;
-            app->paired = (app->vehicle != PK_VEHICLE_NONE);
+            app->paired = (app->vehicle != PK_VEHICLE_NONE) &&
+                          pk_store_slot_key_ready(&app->store, app->vehicle);
         }
         return true;
     }
@@ -467,7 +468,8 @@ bool pk_app_delete_vehicle(pk_app_t *app, int target, bool reset, pk_store_crash
             app->session++;
             app->auth = PK_MSG_AUTH_UNCONFIRMED;
             app->page = PK_PAGE_MAIN;
-            app->paired = (app->vehicle != PK_VEHICLE_NONE);
+            app->paired = (app->vehicle != PK_VEHICLE_NONE) &&
+                          pk_store_slot_key_ready(&app->store, app->vehicle);
             pk_log_clear(&app->logs);
         }
     } else if (ok) {

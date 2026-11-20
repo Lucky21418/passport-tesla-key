@@ -75,12 +75,7 @@ static bool cycle_int(int *dst, int lo, int hi, int step, int delta, bool have)
 
 static void persist_live_store(pk_app_t *app)
 {
-    app->store.live.generation++;
-    if (app->store.nvs && app->store.nvs->prepare && app->store.nvs->commit &&
-        app->store.nvs->prepare(app->store.nvs_ctx, &app->store.live,
-                                sizeof(app->store.live)) == PK_OK) {
-        (void)app->store.nvs->commit(app->store.nvs_ctx);
-    }
+    (void)pk_store_save_prefs(&app->store, app->brightness, app->power);
 }
 
 static int effective_seat_positions(const pk_caps_t *caps, int out_pos[8])
@@ -452,13 +447,7 @@ bool pk_app_activate_setting(pk_app_t *app, pk_setting_id_t key)
     app->focus = key;
     if (key == PK_SETTING_POWER) {
         app->power = (app->power == PK_POWER_COMFORT) ? PK_POWER_ENDURANCE : PK_POWER_COMFORT;
-        app->store.live.power = app->power;
-        app->store.live.generation++;
-        if (app->store.nvs && app->store.nvs->prepare && app->store.nvs->commit) {
-            if (app->store.nvs->prepare(app->store.nvs_ctx, &app->store.live, sizeof(app->store.live)) == PK_OK) {
-                (void)app->store.nvs->commit(app->store.nvs_ctx);
-            }
-        }
+        persist_live_store(app);
         return true;
     }
     if (key == PK_SETTING_BRIGHTNESS) {

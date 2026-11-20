@@ -256,10 +256,12 @@ void app_ports_init(pk_app_t *app, pk_btn_adapter_t *btn, pk_ble_adapter_t *ble)
         if (recovered.current >= 0 && recovered.current < PK_MAX_VEHICLES &&
             recovered.vehicles[recovered.current].used) {
             app->vehicle = recovered.current;
-            app->paired = true;
+            app->paired = pk_store_slot_key_ready(&app->store, recovered.current);
             app->car_focus = recovered.current;
-            if (!port_ensure_slot_keypair(recovered.current)) {
-                ESP_LOGW(TAG, "saved slot %d keypair unavailable on boot", recovered.current);
+            if (!app->paired) {
+                ESP_LOGW(TAG, "saved slot %d keypair unavailable or corrupted on boot",
+                         recovered.current);
+                pk_app_set_msg(app, PK_MSG_NOT_PAIRED);
             }
         }
         bsp_display_backlight((uint8_t)app->brightness);
