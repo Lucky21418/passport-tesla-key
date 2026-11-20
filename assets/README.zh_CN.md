@@ -10,6 +10,21 @@
 
 可复用的字库文件与生成的字库源码放在 `fonts/`。
 
+| 文件 | 格式与目标符号 | 来源、许可与生成方式 |
+| --- | --- | --- |
+| [`fonts/OFL-1.1-SourceHanSans.txt`](fonts/OFL-1.1-SourceHanSans.txt) | 文本（SIL Open Font License 1.1） | 上游 [`adobe-fonts/source-han-sans`](https://github.com/adobe-fonts/source-han-sans) `2.005R` 标签许可证全文（SHA-256 `fcac737e761ec63dbfbdce11030a1780161920d80315edba9c8beff1c2bac5a2`）。 |
+| [`fonts/app_font_cjk_chars.txt`](fonts/app_font_cjk_chars.txt) | UTF-8 字符清单（475 个码位：ASCII `0x20-0x7E` + 380 个非 ASCII） | 覆盖 `main/`（含 `app_icon_text()` 徽章）与 `components/tesla_key/src/pk_copy.c` 中全部界面显示字符的并集。 |
+| [`fonts/app_font_source_han_sans_sc_12.c`](fonts/app_font_source_han_sans_sc_12.c) | LVGL 4-bpp 未压缩 C 字库，12 px（`app_font_source_han_sans_sc_12`） | 由 `SourceHanSansSC-Regular.otf`（`2.005R`，SHA-256 `f1d8611151880c6c336aabeac4640ef434fa13cbfbf1ffe82d0a71b2a5637256`）经钉选版本 `lv_font_conv` `1.5.3` 通过 [`tools/build_cjk_fonts.py`](../tools/build_cjk_fonts.py) 生成；在 [`main/CMakeLists.txt`](../main/CMakeLists.txt) 中通过 `target_sources()` 接入编译，并经 `app_font_cjk_12()` 暴露。 |
+| [`fonts/app_font_source_han_sans_sc_16.c`](fonts/app_font_source_han_sans_sc_16.c) | LVGL 4-bpp 未压缩 C 字库，16 px（`app_font_source_han_sans_sc_16`） | 由 `SourceHanSansSC-Regular.otf`（`2.005R`，SHA-256 `f1d8611151880c6c336aabeac4640ef434fa13cbfbf1ffe82d0a71b2a5637256`）经钉选版本 `lv_font_conv` `1.5.3` 通过 [`tools/build_cjk_fonts.py`](../tools/build_cjk_fonts.py) 生成；在 [`main/CMakeLists.txt`](../main/CMakeLists.txt) 中通过 `target_sources()` 接入编译，并经 `app_font_cjk_16()` 暴露。 |
+
+可复现转换命令（从 `https://github.com/adobe-fonts/source-han-sans/raw/2.005R/OTF/SimplifiedChinese/SourceHanSansSC-Regular.otf` 下载源字体并安装 `lv_font_conv@1.5.3` 后执行）：
+
+```bash
+python3 tools/build_cjk_fonts.py \
+  --font /path/to/SourceHanSansSC-Regular.otf \
+  --lv-font-conv /path/to/lv_font_conv
+```
+
 - 命名要能反映字族、字重、字级与格式。
 - 记录来源、许可、字符范围、转换命令与目标放置路径。
 - 添加字库前评估 Flash 与内部 RAM 影响；ESP32-C3 无 PSRAM。

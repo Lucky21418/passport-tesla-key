@@ -12,6 +12,21 @@ Keep each asset in the matching subdirectory and document its destination, namin
 
 Store reusable font files and generated font sources in `fonts/`.
 
+| File | Format and symbol | Source, license, and generation |
+| --- | --- | --- |
+| [`fonts/OFL-1.1-SourceHanSans.txt`](fonts/OFL-1.1-SourceHanSans.txt) | Text (SIL Open Font License 1.1) | Upstream license text from [`adobe-fonts/source-han-sans`](https://github.com/adobe-fonts/source-han-sans) tag `2.005R` (SHA-256 `fcac737e761ec63dbfbdce11030a1780161920d80315edba9c8beff1c2bac5a2`). |
+| [`fonts/app_font_cjk_chars.txt`](fonts/app_font_cjk_chars.txt) | UTF-8 character inventory (475 code points: ASCII `0x20-0x7E` + 380 non-ASCII) | Union of all display literals in `main/` (including `app_icon_text()` badges) and `components/tesla_key/src/pk_copy.c`. |
+| [`fonts/app_font_source_han_sans_sc_12.c`](fonts/app_font_source_han_sans_sc_12.c) | LVGL 4-bpp uncompressed C font, 12 px (`app_font_source_han_sans_sc_12`) | Generated from `SourceHanSansSC-Regular.otf` (`2.005R`, SHA-256 `f1d8611151880c6c336aabeac4640ef434fa13cbfbf1ffe82d0a71b2a5637256`) using pinned `lv_font_conv` `1.5.3` via [`tools/build_cjk_fonts.py`](../tools/build_cjk_fonts.py); compiled into `main` via `target_sources()` in [`main/CMakeLists.txt`](../main/CMakeLists.txt) and exposed through `app_font_cjk_12()`. |
+| [`fonts/app_font_source_han_sans_sc_16.c`](fonts/app_font_source_han_sans_sc_16.c) | LVGL 4-bpp uncompressed C font, 16 px (`app_font_source_han_sans_sc_16`) | Generated from `SourceHanSansSC-Regular.otf` (`2.005R`, SHA-256 `f1d8611151880c6c336aabeac4640ef434fa13cbfbf1ffe82d0a71b2a5637256`) using pinned `lv_font_conv` `1.5.3` via [`tools/build_cjk_fonts.py`](../tools/build_cjk_fonts.py); compiled into `main` via `target_sources()` in [`main/CMakeLists.txt`](../main/CMakeLists.txt) and exposed through `app_font_cjk_16()`. |
+
+Reproducible conversion command (after downloading `SourceHanSansSC-Regular.otf` from `https://github.com/adobe-fonts/source-han-sans/raw/2.005R/OTF/SimplifiedChinese/SourceHanSansSC-Regular.otf` and installing `lv_font_conv@1.5.3`):
+
+```bash
+python3 tools/build_cjk_fonts.py \
+  --font /path/to/SourceHanSansSC-Regular.otf \
+  --lv-font-conv /path/to/lv_font_conv
+```
+
 - Use descriptive names that include the family, weight, size, and format when relevant.
 - Document the source, license, character range, conversion command, and expected destination.
 - Check Flash and internal-RAM impact before adding a font; the ESP32-C3 has no PSRAM.

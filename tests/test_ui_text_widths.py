@@ -1,42 +1,84 @@
 import pathlib
 import re
+import sys
 import unittest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "tools"))
+import check_glyphs  # noqa: E402
+
+
+FONT_12_PATH = REPO_ROOT / "assets/fonts/app_font_source_han_sans_sc_12.c"
+FONT_16_PATH = REPO_ROOT / "assets/fonts/app_font_source_han_sans_sc_16.c"
+
+
+def _parse_lvgl_font(path: pathlib.Path):
+    text = path.read_text(encoding="utf-8")
+    clean = check_glyphs.COMMENT_RE.sub(" ", text)
+
+    dsc_m = re.search(
+        r"lv_font_fmt_txt_glyph_dsc_t\s+\w+\s*\[\s*\]\s*=\s*\{(.*?)\};",
+        clean,
+        re.S,
+    )
+    if not dsc_m:
+        raise ValueError(f"missing glyph_dsc table in {path}")
+    advs = [int(x) / 16.0 for x in re.findall(r"\.adv_w\s*=\s*(\d+)", dsc_m.group(1))]
+
+    def named_list(pattern, name):
+        match = re.search(
+            pattern.pattern.replace(r"(\w+)", re.escape(name), 1),
+            clean,
+            re.S,
+        )
+        return check_glyphs.parse_ints(match.group(1)) if match else None
+
+    cp_to_gid = {}
+    for _, body in check_glyphs.CMAP_ARRAY_RE.findall(clean):
+        for entry in check_glyphs.split_entries(body):
+            fields = dict(check_glyphs.FIELD_RE.findall(entry))
+            start = int(fields["range_start"], 0)
+            length = int(fields["range_length"], 0)
+            gid_start = int(fields["glyph_id_start"], 0)
+            kind = fields["type"]
+            if kind.endswith("FORMAT0_TINY"):
+                for i in range(length):
+                    cp_to_gid[start + i] = gid_start + i
+            elif kind.endswith("FORMAT0_FULL"):
+                ofs = named_list(check_glyphs.OFFSET_LIST_RE, fields["glyph_id_ofs_list"])
+                for i, o in enumerate(ofs[:length]):
+                    if o or i == 0:
+                        cp_to_gid[start + i] = gid_start + o
+            elif kind.endswith("SPARSE_TINY"):
+                deltas = named_list(check_glyphs.UNICODE_LIST_RE, fields["unicode_list"])
+                cnt = int(fields.get("list_length", str(len(deltas))), 0)
+                for i, d in enumerate(deltas[:cnt]):
+                    cp_to_gid[start + d] = gid_start + i
+            elif kind.endswith("SPARSE_FULL"):
+                deltas = named_list(check_glyphs.UNICODE_LIST_RE, fields["unicode_list"])
+                ofs = named_list(check_glyphs.OFFSET_LIST_RE, fields["glyph_id_ofs_list"])
+                cnt = int(fields.get("list_length", str(len(deltas))), 0)
+                for i, d in enumerate(deltas[:cnt]):
+                    cp_to_gid[start + d] = gid_start + ofs[i]
+            else:
+                raise ValueError(f"unsupported cmap type {kind} in {path}")
+    return advs, cp_to_gid
 
 
 def load_font_widths():
-    font_src = (REPO_ROOT / "main/app_font_cjk.c").read_text(encoding="utf-8")
-    adv12 = [
-        int(x) / 16.0
-        for x in re.findall(
-            r"\.adv_w\s*=\s*(\d+)",
-            re.search(r"k_glyph_dsc_12\[\d+\]\s*=\s*\{(.*?)\};", font_src, re.S).group(1),
-        )
-    ]
-    adv16 = [
-        int(x) / 16.0
-        for x in re.findall(
-            r"\.adv_w\s*=\s*(\d+)",
-            re.search(r"k_glyph_dsc_16\[\d+\]\s*=\s*\{(.*?)\};", font_src, re.S).group(1),
-        )
-    ]
-    ul12 = [
-        int(x, 16)
-        for x in re.findall(
-            r"0x[0-9a-fA-F]+",
-            re.search(r"k_unicode_list_12\[\d+\]\s*=\s*\{(.*?)\};", font_src, re.S).group(1),
-        )
-    ]
-    cp_to_gid = {32 + cp: 1 + idx for idx, cp in enumerate(ul12)}
-    return adv12, adv16, cp_to_gid
+    adv12, cp_to_gid_12 = _parse_lvgl_font(FONT_12_PATH)
+    adv16, cp_to_gid_16 = _parse_lvgl_font(FONT_16_PATH)
+    if set(cp_to_gid_12.keys()) != set(cp_to_gid_16.keys()):
+        raise AssertionError("12 px and 16 px font subsets have mismatched codepoint coverage")
+    return adv12, adv16, (cp_to_gid_12, cp_to_gid_16)
 
 
 def measure_px(text, is16, adv12, adv16, cp_to_gid):
     advs = adv16 if is16 else adv12
+    cmap = cp_to_gid[1] if is16 else cp_to_gid[0]
     total = 0.0
     for ch in text:
-        gid = cp_to_gid.get(ord(ch))
+        gid = cmap.get(ord(ch))
         if gid is None or gid >= len(advs):
             total += 16.0 if is16 else 13.0
         else:
@@ -169,7 +211,7 @@ class UiTextWidthTest(unittest.TestCase):
         self.assertEqual(too_wide, [], "pk_copy strings exceed 2-line limit:\n" + "\n".join(too_wide))
 
     def test_all_ui_and_copy_glyphs_exist_in_font(self):
-        _, _, cp_to_gid = load_font_widths()
+        _, _, (cp_to_gid_12, cp_to_gid_16) = load_font_widths()
         missing = []
         for rel in (*UI_SOURCE_FILES, "components/tesla_key/src/pk_copy.c"):
             for idx, line in enumerate((REPO_ROOT / rel).read_text(encoding="utf-8").splitlines(), 1):
@@ -178,9 +220,27 @@ class UiTextWidthTest(unittest.TestCase):
                     continue
                 for m in re.finditer(r'"([^"]+)"', line):
                     for ch in m.group(1):
-                        if ord(ch) >= 32 and ord(ch) not in cp_to_gid:
-                            missing.append(f"{rel}:L{idx}: U+{ord(ch):04X} {ch!r} in {m.group(1)!r}")
-        self.assertEqual(missing, [], "Missing glyphs in app_font_cjk.c:\n" + "\n".join(missing[:20]))
+                        cp = ord(ch)
+                        if cp >= 32 and (cp not in cp_to_gid_12 or cp not in cp_to_gid_16):
+                            missing.append(f"{rel}:L{idx}: U+{cp:04X} {ch!r} in {m.group(1)!r}")
+        self.assertEqual(missing, [], "Missing glyphs in bundled Source Han Sans SC fonts:\n" + "\n".join(missing[:20]))
+
+    def test_icon_badges_fit_20px_slot(self):
+        adv12, adv16, cp_to_gid = load_font_widths()
+        widgets_src = (REPO_ROOT / "main/ui_widgets.c").read_text(encoding="utf-8")
+        icon_block = re.search(
+            r"const char \*app_icon_text\(app_icon_id_t id\)\s*\{(.*?)\n\}",
+            widgets_src,
+            re.S,
+        )
+        self.assertIsNotNone(icon_block, "app_icon_text() not found in main/ui_widgets.c")
+        overflows = []
+        for m in re.finditer(r'return\s+"([^"]+)"', icon_block.group(1)):
+            txt = m.group(1)
+            w = measure_px(txt, False, adv12, adv16, cp_to_gid)
+            if w > 20.0:
+                overflows.append(f"{txt!r}: {w:.2f}px > 20px")
+        self.assertEqual(overflows, [], "Icon badge overflows 20px slot:\n" + "\n".join(overflows))
 
 
 if __name__ == "__main__":
