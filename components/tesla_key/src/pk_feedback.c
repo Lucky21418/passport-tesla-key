@@ -8,7 +8,6 @@ static bool is_progress_msg(pk_msg_id_t id)
     case PK_MSG_SENT_WAIT:
     case PK_MSG_QUAL_IN_PROGRESS:
     case PK_MSG_LOCK_VERIFYING:
-    case PK_MSG_LOCK_RELAYING:
     case PK_MSG_CMD_WAIT_MID:
     case PK_MSG_APPROVED_NEED_AUTH:
     case PK_MSG_RECONNECT_RUNNING:

@@ -114,7 +114,6 @@ static const char *const k_copy[PK_MSG_COUNT] = {
      */
     [PK_MSG_TRUNK_UNAVAILABLE] = "箱盖不可用；除雾请用车内控制",
     [PK_MSG_BLE_SLOTS_FULL] = "车已在线，蓝牙3连接额已满（请先关手机蓝牙）",
-    [PK_MSG_LOCK_RELAYING] = "正在补发锁车，请等待",
     [PK_MSG_RESPONSE_TOO_LARGE] = "车辆响应过大，未补发",
 };
 

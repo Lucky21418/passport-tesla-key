@@ -32,9 +32,6 @@
 #define PK_PAIR_VERIFY_MS            25000u
 #define PK_SCREEN_MS                 30000u
 #define PK_LOW_BATT_SCREEN_MS        5000u  /* <=5% 低电应急执行后快速回睡窗口 */
-/* Retained durations. Product code must not auto-replay a LOCK inside them. */
-#define PK_LOCK_RELAY_MS             9000u
-#define PK_LOCK_RELAY_STEP_MS        2000u
 #define PK_LOCK_ALERT_DISPLAY_MS     15000u /* 锁车失败/门盖未关红底醒屏警告窗口 */
 #define PK_STUCK_KEY_MS              10000u /* >10s GPIO0 连续按压判定为兜内卡键 */
 #define PK_LOG_CAPACITY              64u

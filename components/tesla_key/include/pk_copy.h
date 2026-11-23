@@ -109,7 +109,6 @@ typedef enum {
     PK_MSG_REBOOT,                     /* 重启后资格与授权失效 */
     PK_MSG_TRUNK_UNAVAILABLE,          /* driving home: closures unavailable */
     PK_MSG_BLE_SLOTS_FULL,             /* 车已在线，蓝牙3连接额已满（请先关手机蓝牙） */
-    PK_MSG_LOCK_RELAYING,              /* 正在补发锁车，请等待 */
     PK_MSG_COUNT
 } pk_msg_id_t;
 
