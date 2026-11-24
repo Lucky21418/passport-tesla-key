@@ -242,6 +242,21 @@ class UiTextWidthTest(unittest.TestCase):
                 overflows.append(f"{txt!r}: {w:.2f}px > 20px")
         self.assertEqual(overflows, [], "Icon badge overflows 20px slot:\n" + "\n".join(overflows))
 
+    def test_approved_cbi_mdi_icon_bitmaps_and_vin_qr(self):
+        icons_data = (REPO_ROOT / "main/app_icons_data.c").read_text(encoding="utf-8")
+        widgets_src = (REPO_ROOT / "main/ui_widgets.c").read_text(encoding="utf-8")
+        pages_src = (REPO_ROOT / "main/app_ui_pages.c").read_text(encoding="utf-8")
+
+        self.assertIn("MIT License", icons_data)
+        self.assertIn("Apache-2.0 License", icons_data)
+        self.assertIn("lv_image_create", widgets_src)
+        self.assertIn("app_icon_dsc(id)", widgets_src)
+        self.assertIn("app_vin_qr_dsc()", pages_src)
+        self.assertNotIn("HTTP\\n192.168.4.1", pages_src)
+
+        dsc_matches = re.findall(r"^\s+\[APP_ICON_[A-Z0-9_]+\]\s*=\s*\{", icons_data, re.M)
+        self.assertEqual(len(dsc_matches), 31, f"Expected 31 icon descriptors, got {len(dsc_matches)}")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,11 +2,13 @@
 #include "lvgl.h"
 
 /*
- * P2 Adjudication (Gate-B):
- * The 31 unlicensed bitmap icons and QR bitmap from the legacy tree have been
- * stripped and are prohibited from entering this repository.
- * UI icon slots use plain-text / licensed LVGL symbol labels instead of
- * embedded bitmap descriptors.
+ * Approved Tesla App-style monochrome 20x20 icons and 58x58 QR code bitmap.
+ *
+ * All icons originate from open-source sets approved in STITCH-SPEC.md and
+ * ui-approved/icons/ICON-SOURCES.md:
+ *   - CBI (custom-brand-icons, Home Assistant Community): MIT License
+ *   - MDI (@mdi/svg, Pictogrammers): Apache-2.0 License
+ *   - QR code matrix for http://192.168.4.1: Project Nayuki qrcodegen (MIT)
  */
 typedef enum {
     APP_ICON_BT_CONNECT,
@@ -44,3 +46,5 @@ typedef enum {
 } app_icon_id_t;
 
 const char *app_icon_text(app_icon_id_t id);
+const lv_image_dsc_t *app_icon_dsc(app_icon_id_t id);
+const lv_image_dsc_t *app_vin_qr_dsc(void);

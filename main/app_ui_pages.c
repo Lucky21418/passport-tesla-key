@@ -675,7 +675,7 @@ void app_ui_render_page_status(lv_obj_t *body, const pk_app_t *app)
 
 void app_ui_render_page_vin(lv_obj_t *body, const pk_app_t *app)
 {
-    lv_obj_t *net, *qr_card, *qr_lbl, *vstat;
+    lv_obj_t *net, *qr_card, *qr_img, *vstat;
     char state_txt[32];
     char cnt_txt[16];
 
@@ -696,9 +696,13 @@ void app_ui_render_page_vin(lv_obj_t *body, const pk_app_t *app)
         lv_obj_set_style_text_align(v2, LV_TEXT_ALIGN_RIGHT, 0);
     }
 
-    qr_card = ui_create_box(body, (240 - 104) / 2, 94, 104, 66, COL_CARD_BG, COL_CARD_BORDER, 4);
-    qr_lbl = create_lbl_wrap(qr_card, font_12(), COL_WHITE, 6, 14, 92, "HTTP\n192.168.4.1");
-    lv_obj_set_style_text_align(qr_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    qr_card = ui_create_box(body, (240 - 66) / 2, 94, 66, 66, COL_WHITE, COL_CARD_BORDER, 4);
+    qr_img = lv_image_create(qr_card);
+    lv_image_set_src(qr_img, app_vin_qr_dsc());
+    lv_obj_set_style_image_recolor(qr_img, lv_color_hex(COL_BG), 0);
+    lv_obj_set_style_image_recolor_opa(qr_img, LV_OPA_COVER, 0);
+    lv_obj_set_pos(qr_img, 4, 4);
+    lv_obj_set_size(qr_img, 58, 58);
 
     create_icon(body, APP_ICON_CELLPHONE, COL_MUTED, 24, 164);
     create_lbl(body, font_12(), COL_MUTED, 48, 166, 184, "连热点打开 192.168.4.1");

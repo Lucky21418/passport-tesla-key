@@ -64,20 +64,20 @@ lv_obj_t *ui_create_box(lv_obj_t *parent, int x, int y, int w, int h,
 
 lv_obj_t *create_icon(lv_obj_t *parent, app_icon_id_t id, uint32_t hex_color, int x, int y)
 {
-    lv_obj_t *lbl = lv_label_create(parent);
-    lv_obj_set_style_text_font(lbl, font_12(), 0);
-    lv_obj_set_style_text_color(lbl, lv_color_hex(hex_color), 0);
-    lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(lbl, x, y);
-    lv_obj_set_size(lbl, 20, 20);
-    lv_label_set_text(lbl, app_icon_text(id));
-    return lbl;
+    lv_obj_t *img = lv_image_create(parent);
+    lv_image_set_src(img, app_icon_dsc(id));
+    lv_obj_set_style_image_recolor(img, lv_color_hex(hex_color), 0);
+    lv_obj_set_style_image_recolor_opa(img, LV_OPA_COVER, 0);
+    lv_obj_set_pos(img, x, y);
+    lv_obj_set_size(img, 20, 20);
+    return img;
 }
 
 void update_icon(lv_obj_t *ico_obj, app_icon_id_t id, uint32_t hex_color)
 {
-    lv_label_set_text(ico_obj, app_icon_text(id));
-    lv_obj_set_style_text_color(ico_obj, lv_color_hex(hex_color), 0);
+    lv_image_set_src(ico_obj, app_icon_dsc(id));
+    lv_obj_set_style_image_recolor(ico_obj, lv_color_hex(hex_color), 0);
+    lv_obj_set_style_image_recolor_opa(ico_obj, LV_OPA_COVER, 0);
 }
 
 int text_px_width(const lv_font_t *f, const char *s)

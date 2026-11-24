@@ -3,6 +3,7 @@ idf_component_register(
          "app_ui.c"
          "app_ui_pages.c"
          "ui_widgets.c"
+         "app_icons_data.c"
          "app_font_cjk.c"
          "app_ports.c"
          "diag_log.c"
