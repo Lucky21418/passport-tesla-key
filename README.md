@@ -26,6 +26,20 @@ This branch hosts the controlled migration of the verified `0dc5301c52fd4d3ee118
    - [`tools/gen_tesla_proto.sh`](tools/gen_tesla_proto.sh) is environment-configurable (`NANOPB_PYTHON` / `NANOPB_GENERATOR`) with no hardcoded personal paths and pins `protobuf==5.28.3`, `grpcio-tools==1.68.0`, and `nanopb==0.4.9.1`.
    - S4 candidate `33560de`, cleanup candidate `7e0582c`, and external directories are excluded.
 
+## Basic Edition Development & Gate Plan (2026-11-24 Adjudication)
+
+Per the user-confirmed Basic Edition workflow update on 2026-11-24, subsequent Basic Edition work follows a continuous-development and single consolidated acceptance schedule (supplemental tracking table in [`docs/assets/README.md`](docs/assets/README.md#basic-edition-development-review-and-consolidated-device-testing-plan-2026-11-24)):
+
+1. **Continuous Development Before Consolidated Device Testing**: Because repeated interim hardware sessions are impractical, Basic Edition development proceeds continuously first and shifts to a single consolidated on-device test pass at the end.
+2. **Interim Device Gates Retired (`P02`, `P03`)**: Former `P02` and `P03` are no longer used as mid-stream development gates; agents do not flash firmware or block waiting for hardware acceptance after each small increment (`Device tests: NOT RUN` with pending checks listed in `Unverified` per [`AGENTS.md`](AGENTS.md#required-validation-and-delivery)).
+3. **Candidate Continuation & Deferred Branch Naming (`P04`, `P05`)**: Continue appending increments directly onto the current candidate line; `P04` executes against the established Basic Edition scope without a separate interim gate, and `P05` does not create a separate formal Basic Edition branch yet—formal naming is deferred until closeout.
+4. **Single Consolidated Official Independent Review (`P10`, `P15`, `P16`)**: Interim official cloud reviews are no longer development gates; former `P10`, `P15`, and `P16` are merged into one official independent review of the final candidate after development finishes, and all review findings must be resolved before producing the testable firmware image.
+5. **One-Pass Consolidated On-Device Test (`P12`)**: The user runs a single consolidated hardware test pass by flashing the post-review merged image and verifying boot, display rendering, three-button input, double-click feel, BLE behavior, NVS persistence across reboot, pairing UI, and sleep/wake; power draw (former `P12`) is measured when metering instruments are available.
+6. **Post-Test Formal Adjudication & Delivery (`P03`, `P17`)**: Formal adjudication and delivery are performed after the consolidated device test, covering former `P03` and `P17`.
+7. **Targeted Retest Only on Must-Fix Issues**: If the consolidated device test uncovers must-fix defects, ship a targeted fix build for retest rather than testing repeatedly during development.
+8. **Single-Item Dispatch & Vehicle Safety Boundary**: Task dispatch remains strictly one item at a time; live-vehicle pairing and live-vehicle control are not executed.
+9. **Double-Click Mis-Trigger Status (Pending Joint Decision)**: Double-click mis-triggering remains under independent analysis and has not been jointly decided; keep timing unchanged under an "analyze first and decide jointly before modifying" hold, without treating any unconfirmed timing proposal as settled.
+
 ## Custom 8 MB Partition Layout and Flashing / Stored Data Policy
 
 Per [`docs/development/engineering/firmware-layout.md`](docs/development/engineering/firmware-layout.md), this application uses a validated custom 8 MB [`partitions.csv`](partitions.csv):

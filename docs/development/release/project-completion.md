@@ -29,10 +29,12 @@ available, each selectable on its own or with others.
 
 The [on-device testing invitation](../ai-guide.md#offer-on-device-testing)
 is required after every completed firmware implementation, independently of
-this menu; do not defer it until a release or a closing action is selected.
-Asking is mandatory, but flashing still requires the user's approval. Follow
-that handoff for device discovery, the power-on/data-cable/USB prompt when no
-device is detected, and reporting tests that remain unperformed.
+this menu, unless the user has explicitly established a deferred consolidated
+device-test schedule in the product plan; do not defer it merely until a
+release or a closing action is selected. Asking is mandatory when applicable,
+but flashing still requires the user's approval. Follow that handoff for device
+discovery, the power-on/data-cable/USB prompt when no device is detected, and
+reporting tests that remain unperformed.
 
 ## The six actions
 

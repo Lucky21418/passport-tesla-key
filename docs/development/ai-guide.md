@@ -122,7 +122,12 @@ firmware path. For example:
 
 For documentation-only or other tasks that do not change firmware, explain
 that on-device testing is not applicable; do not flash unrelated firmware just
-to satisfy this workflow. This test invitation does not authorize commits,
+to satisfy this workflow. When the user or the product's documented development
+plan explicitly directs continuous multi-increment development with a single
+consolidated device-test pass at the end, follow that instruction instead of
+offering to flash or blocking on hardware acceptance after each interim step:
+record `Device tests: NOT RUN` and carry the pending checks in `Unverified`
+until the consolidated pass. This test invitation does not authorize commits,
 pushes, or any of the optional [project-closing actions](release/project-completion.md).
 
 Related documents: [build and test](engineering/build-and-test.md), [coding conventions](engineering/coding-conventions.md), [hardware guide](../hardware-design/AI_HARDWARE_DEVELOPMENT_GUIDE.md), [documentation index](../README.md), and [root `AGENTS.md`](../../AGENTS.md).

@@ -52,5 +52,5 @@ python3 tools/archive_firmware.py verify <archive-directory>
 ## 报告
 
 分别报告 `Build`、`Host tests`、`Device tests`、`Unverified`，列出实际
-检查与配置差异。完整实现固件修改后按 AI 指南邀请真机测试。仅构建／打包
-不授权 USB 烧录、Git 写操作或发布。
+检查与配置差异。完整实现固件修改后按 AI 指南执行真机测试交接（若已约定延后
+集中测试则按约定暂缓中途刷机提示）。仅构建／打包不授权 USB 烧录、Git 写操作或发布。

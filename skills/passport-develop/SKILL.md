@@ -66,9 +66,13 @@ use paired documents under `docs/`; never store secrets or raw private logs.
 Do not create a progress-document framework for a small edit.
 
 After a completed firmware implementation, proactively offer device testing
-using `docs/development/ai-guide.md`. A build or connected USB device does not
-authorize flashing. Stop for the user's decision if the remaining work requires
-new authority; do not turn that pause into an automatic release.
+using `docs/development/ai-guide.md`, unless the user's explicit choices or
+documented product plan direct continuous development with a consolidated
+device-test pass at the end (in which case record `Device tests: NOT RUN` and
+list pending checks in `Unverified` without prompting to flash mid-stream). A
+build or connected USB device does not authorize flashing. Stop for the user's
+decision if the remaining work requires new authority; do not turn that pause
+into an automatic release.
 
 Report `Build`, `Host tests`, `Device tests`, and `Unverified` separately.
 Documentation-only work does not need unrelated firmware flashed to a device.

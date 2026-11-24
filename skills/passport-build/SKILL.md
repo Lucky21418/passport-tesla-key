@@ -64,5 +64,6 @@ an artifact without checking the content and obtaining authorization.
 
 Separate `Build`, `Host tests`, `Device tests`, and `Unverified`, with the actual
 checks and any configuration differences. After a completed firmware change,
-offer device testing per the AI guide. Building or packaging alone does not
-authorize USB flashing, Git writes, or a release.
+follow the AI guide's device-testing handoff (offering device testing unless an
+explicit consolidated device-test schedule defers interim flashing). Building
+or packaging alone does not authorize USB flashing, Git writes, or a release.

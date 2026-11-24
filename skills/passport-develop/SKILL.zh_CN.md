@@ -53,7 +53,9 @@ description: 根据用户需求实现或扩展 FoloToy AI Passport 应用，组�
 秘密或未脱敏日志。不要为小修改创建一整套进度文档。
 
 每轮完整实现固件需求后，按 `docs/development/ai-guide.zh_CN.md` 主动邀请
-真机测试。编译完成或 USB 已连接不代表获得烧录授权。剩余工作需要新授权时，
+真机测试；若用户明确选择或产品计划已约定先连续开发、最后集中真机测试，则中途
+增量不再提示刷机，统一记录 `Device tests: NOT RUN` 并在 `Unverified` 中保留
+待测项。编译完成或 USB 已连接不代表获得烧录授权。剩余工作需要新授权时，
 停下来等待用户决定，不自动转入发布。
 
 分别报告 `Build`、`Host tests`、`Device tests` 和 `Unverified`。

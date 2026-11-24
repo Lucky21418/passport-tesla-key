@@ -29,6 +29,21 @@ Per parent adjudication P2 and [`assets/README.md`](../../assets/README.md), mat
 
 The `feature/tesla-key` branch configures a 256 KB `bblog` data partition (`0x7C0000`–`0x800000`) alongside `nvs` (`0x9000`), `phy_init` (`0xF000`), and `factory` (`0x10000`, `0x7B0000` bytes) within the 8 MB Flash boundary. This layout is validated by `./tools/validate.sh --firmware` and is specific to this branch, not a mandatory template contract. See [`docs/development/engineering/firmware-layout.md`](../development/engineering/firmware-layout.md#flashing-and-stored-data) for the full flashing and stored-data policy.
 
+## Basic Edition Development, Review, and Consolidated Device-Testing Plan (2026-11-24)
+
+In alignment with the root [`README.md`](../../README.md#basic-edition-development--gate-plan-2026-11-24-adjudication) and [`AGENTS.md`](../../AGENTS.md#required-validation-and-delivery), the 2026-11-24 user-confirmed Basic Edition plan restructures former phase gates (`P02`–`P17`) and active agent rules as follows:
+
+| Item / Gate Reference | 2026-11-24 Updated Disposition & Agent Rule |
+| --- | --- |
+| **Development cadence** | Develop Basic Edition increments continuously first; defer on-device hardware acceptance to a single consolidated test pass at the end because repeated mid-stream device testing is impractical. |
+| **Former `P02`, `P03` (interim gates)** | Retired as mid-stream development gates. Do not flash firmware or pause waiting for on-device acceptance after each increment; report `Device tests: NOT RUN` and carry pending hardware checks in `Unverified`. |
+| **`P04` (Basic Edition scope) & `P05` (branching)** | Continue appending commits on the current candidate line. Execute `P04` per the established Basic Edition target without a separate interim gate; defer opening or naming a separate formal Basic Edition branch (`P05`) until closeout. |
+| **Former `P10`, `P15`, `P16` (official cloud reviews)** | Interim official cloud reviews are no longer development gates. Merge `P10`, `P15`, and `P16` into one official independent review of the final candidate once development completes; fix all review findings before building the testable firmware image. |
+| **Consolidated device test & `P12` (power)** | Run one consolidated user device-test pass on the post-review merged image covering boot, screen rendering, three-button input, double-click feel, BLE, NVS storage across reboot, pairing UI, and sleep/wake; measure power consumption (`P12`) when metering equipment is available. |
+| **Post-test closeout (`P03`, `P17`) & retest rule** | Perform formal adjudication and delivery after the consolidated device test, covering former `P03` and `P17`. Only if must-fix defects surface during consolidated testing is a follow-up fix image built for retest, rather than testing repeatedly during development. |
+| **Dispatch & vehicle safety red lines** | Keep dispatch strictly one task item at a time. Never execute live-vehicle pairing or live-vehicle control. |
+| **Double-click mis-trigger status** | Independent analysis is still in progress and not yet jointly decided. Record and enforce "analyze first and decide jointly before modifying"; do not treat any unconfirmed timing change proposal as a settled decision. |
+
 ## Boundary
 
 Content in `docs/assets/` is private to this fork and must not be proposed back to upstream `FoloToy/ai-passport:main`. Upstream keeps `docs/assets/` empty except for `.gitkeep`.
