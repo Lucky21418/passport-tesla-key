@@ -199,7 +199,7 @@ static footer_spec_t footer_for_page(const pk_app_t *app)
         { PK_PAGE_VIN,     { "▲ —",        "● 等待提交", "▼ 取消",     "手机提交17位VIN（禁I O Q）", COL_WHITE } },
         { PK_PAGE_WAIT,    { "▲ —",        "● 退出等待", "▼ —",        "退出只停止本地等待",         COL_WHITE } },
         { PK_PAGE_RESULT,  { "▲ —",        "● 返回",     "▼ —",        "再发送需新操作，不自动重发", COL_WHITE } },
-        { PK_PAGE_OFFLINE, { "▲ 闪灯禁用", "● 重连",     "▼ 鸣笛禁用", "鸣笛须先重连",        COL_WHITE } },
+        { PK_PAGE_OFFLINE, { "▲ 不可用",   "● 重连",     "▼ 不可用",   "双击● 打开车辆列表",         COL_WHITE } },
         { PK_PAGE_LOGS,    { "▲ 上条",     "● 返回设置", "▼ 下条",     "双击● 返回",             COL_WHITE } },
     };
     size_t i;

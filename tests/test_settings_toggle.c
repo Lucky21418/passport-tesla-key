@@ -318,8 +318,10 @@ static void test_basic_settings_and_car_list_convergence(void)
 {
     pk_app_t app;
     pk_ble_adapter_t ad;
+    pk_intent_t intent;
     int items[8];
     int n, i;
+    bool has_add;
 
     setup(&app, &ad);
     app.page = PK_PAGE_SETTINGS;
@@ -339,12 +341,58 @@ static void test_basic_settings_and_car_list_convergence(void)
     pk_app_settings_arrow(&app, -1);
     expect(app.focus == PK_SETTING_RESET, "settings arrow -1 wraps -> RESET");
 
-    /* 06 cars list items never include PK_LIST_QUICK */
+    /* 06 cars list items never include PK_LIST_QUICK; 1 car shows PK_LIST_ADD */
     n = pk_app_list_items(&app, items, 8);
     expect(n > 0, "car list has items");
+    has_add = false;
     for (i = 0; i < n; i++) {
         expect(items[i] != PK_LIST_QUICK, "car list does not expose PK_LIST_QUICK");
+        if (items[i] == PK_LIST_ADD) {
+            has_add = true;
+        }
     }
+    expect(has_add, "1-car list exposes PK_LIST_ADD");
+
+    /* Add 2nd and 3rd cars -> capacity reaches 3, PK_LIST_ADD disappears, enter_vin blocked */
+    expect(pk_store_add_verified(&app.store, "5YJS0000000000000", PK_STORE_CRASH_NONE),
+           "add 2nd car");
+    expect(pk_store_add_verified(&app.store, "5YJSA1E26HF000337", PK_STORE_CRASH_NONE),
+           "add 3rd car");
+    expect(pk_store_count(&app.store) == 3, "store count is 3");
+    n = pk_app_list_items(&app, items, 8);
+    has_add = false;
+    for (i = 0; i < n; i++) {
+        if (items[i] == PK_LIST_ADD) {
+            has_add = true;
+        }
+    }
+    expect(!has_add, "3-car full list hides PK_LIST_ADD");
+    expect(!pk_app_enter_vin(&app) && app.message == PK_MSG_FULL_OR_PROTECTED,
+           "3-car full blocks VIN entry with PK_MSG_FULL_OR_PROTECTED");
+
+    /* Delete 3rd car -> capacity drops to 2, PK_LIST_ADD reappears */
+    expect(pk_app_delete_vehicle(&app, 2, false, PK_STORE_CRASH_NONE), "delete slot 2");
+    expect(pk_store_count(&app.store) == 2, "store count is 2 after delete");
+    n = pk_app_list_items(&app, items, 8);
+    has_add = false;
+    for (i = 0; i < n; i++) {
+        if (items[i] == PK_LIST_ADD) {
+            has_add = true;
+        }
+    }
+    expect(has_add, "2-car list restores PK_LIST_ADD");
+
+    /* D07/D09 on BASIC 4 core actions: moving blocks UNLOCK/FRUNK/TRUNK, allows LOCK */
+    app.page = PK_PAGE_MAIN;
+    app.moving = true;
+    intent = pk_app_make_intent(&app, PK_ACTION_UNLOCK);
+    expect(!pk_app_commit(&app, &intent, 3000), "D07/D09: moving blocks UNLOCK");
+    intent = pk_app_make_intent(&app, PK_ACTION_FRUNK_OPEN);
+    expect(!pk_app_commit(&app, &intent, 3000), "D07/D09: moving blocks FRUNK");
+    intent = pk_app_make_intent(&app, PK_ACTION_TRUNK_MOVE);
+    expect(!pk_app_commit(&app, &intent, 3000), "D07/D09: moving blocks TRUNK");
+    intent = pk_app_make_intent(&app, PK_ACTION_LOCK);
+    expect(pk_app_commit(&app, &intent, 3000), "D09: moving allows LOCK");
 }
 
 int main(void)
