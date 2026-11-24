@@ -247,15 +247,24 @@ class UiTextWidthTest(unittest.TestCase):
         widgets_src = (REPO_ROOT / "main/ui_widgets.c").read_text(encoding="utf-8")
         pages_src = (REPO_ROOT / "main/app_ui_pages.c").read_text(encoding="utf-8")
 
+        self.assertTrue((REPO_ROOT / "assets/icons/MIT-CBI.txt").is_file())
+        self.assertTrue((REPO_ROOT / "assets/icons/Apache-2.0-MDI.txt").is_file())
         self.assertIn("MIT License", icons_data)
         self.assertIn("Apache-2.0 License", icons_data)
+        self.assertIn("assets/icons/MIT-CBI.txt", icons_data)
+        self.assertIn("assets/icons/Apache-2.0-MDI.txt", icons_data)
         self.assertIn("lv_image_create", widgets_src)
         self.assertIn("app_icon_dsc(id)", widgets_src)
         self.assertIn("app_vin_qr_dsc()", pages_src)
         self.assertNotIn("HTTP\\n192.168.4.1", pages_src)
 
         dsc_matches = re.findall(r"^\s+\[APP_ICON_[A-Z0-9_]+\]\s*=\s*\{", icons_data, re.M)
-        self.assertEqual(len(dsc_matches), 31, f"Expected 31 icon descriptors, got {len(dsc_matches)}")
+        self.assertEqual(len(dsc_matches), 21, f"Expected 21 icon descriptors, got {len(dsc_matches)}")
+
+        svg_refs = re.findall(r"Source SVG:\s*(assets/icons/(?:cbi|mdi)/[a-z0-9-]+\.svg)", icons_data)
+        self.assertEqual(len(svg_refs), 21, f"Expected 21 SVG source references, got {len(svg_refs)}")
+        for rel_svg in svg_refs:
+            self.assertTrue((REPO_ROOT / rel_svg).is_file(), f"Missing tracked SVG file: {rel_svg}")
 
 
 if __name__ == "__main__":

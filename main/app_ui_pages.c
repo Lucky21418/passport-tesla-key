@@ -22,15 +22,6 @@ typedef struct {
 static const pk_setting_meta_t k_setting_meta[PK_SETTING_COUNT] = {
     [PK_SETTING_BRIGHTNESS]   = { "屏幕亮度",     APP_ICON_BRIGHTNESS },
     [PK_SETTING_POWER]        = { "省电策略",     APP_ICON_MOON },
-    [PK_SETTING_FLASH]        = { "寻车闪灯",     APP_ICON_TESLA_FLASH },
-    [PK_SETTING_HORN]         = { "寻车鸣笛",     APP_ICON_TESLA_HORN },
-    [PK_SETTING_VENT]         = { "车窗通风",     APP_ICON_TESLA_VENT },
-    [PK_SETTING_CLIMATE]      = { "空调",         APP_ICON_TESLA_FAN },
-    [PK_SETTING_SENTRY]       = { "哨兵",         APP_ICON_TESLA_SENTRY },
-    [PK_SETTING_DEFOG]        = { "除雾",         APP_ICON_TESLA_FAN },
-    [PK_SETTING_PORT]         = { "充电口",       APP_ICON_TESLA_PORT },
-    [PK_SETTING_SEAT]         = { "座椅加热",     APP_ICON_SEAT_HEATER },
-    [PK_SETTING_STEERING]     = { "方向盘加热",   APP_ICON_STEERING },
     [PK_SETTING_LOGS]         = { "日志与诊断",   APP_ICON_CLIPBOARD },
     [PK_SETTING_HOTSPOT]      = { "热点",         APP_ICON_WIFI },
     [PK_SETTING_RESET]        = { "恢复出厂",     APP_ICON_TRASH },
@@ -165,10 +156,6 @@ void app_ui_render_hold_gauge(app_ui_ctx_t *ctx, pk_action_t act,
     switch (act) {
     case PK_ACTION_FRUNK_OPEN:        ico = APP_ICON_TESLA_HOOD;  title = "继续按住，确认开前备箱"; break;
     case PK_ACTION_TRUNK_MOVE:        ico = APP_ICON_TESLA_TRUNK; title = "继续按住，确认动后备箱"; break;
-    case PK_ACTION_CHARGE_PORT_OPEN:  ico = APP_ICON_TESLA_PORT;  title = "继续按住，开启充电口"; break;
-    case PK_ACTION_CHARGE_PORT_CLOSE: ico = APP_ICON_TESLA_PORT;  title = "继续按住，关闭充电口"; break;
-    case PK_ACTION_HONK:              ico = APP_ICON_TESLA_HORN;  title = "继续按住，确认鸣笛"; break;
-    case PK_ACTION_CLIMATE_ON:        ico = APP_ICON_TESLA_FAN;   title = "继续按住，开启空调"; break;
     default: break;
     }
 
