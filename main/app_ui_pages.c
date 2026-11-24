@@ -11,7 +11,7 @@
 #include <string.h>
 
 /* ==========================================================================
- * Settings Metadata Helpers (18 Rows, Table-Driven)
+ * Settings Metadata Helpers (5 BASIC Device Settings Rows, Table-Driven)
  * ========================================================================== */
 
 typedef struct {
@@ -43,52 +43,8 @@ static app_icon_id_t setting_icon(pk_setting_id_t id)
     return APP_ICON_COG;
 }
 
-static const char *setting_vehicle_prereq(const pk_app_t *app, pk_action_t action)
-{
-    if (app->vehicle == PK_VEHICLE_NONE) {
-        return "未添加车辆";
-    }
-    if (!app->connected) {
-        return "请先重连";
-    }
-    /* Same table as the command guard. An unknown park state is not a dead
-     * end: pressing the row performs one check-before-act drive-state read
-     * and then sends the frozen gesture. Only a proven moving state blocks. */
-    if (app->moving && pk_action_moving_blocked(action)) {
-        return "行驶中不可用";
-    }
-    return NULL;
-}
-
-static void format_parked_setting_val(const pk_app_t *app, pk_setting_id_t id, char *out, size_t n)
-{
-    static const struct {
-        pk_setting_id_t id;
-        const char     *text;
-    } k_labels[] = {
-        { PK_SETTING_SENTRY,       "开／关" },
-        { PK_SETTING_PORT,         "长按开/关" },
-        { PK_SETTING_VENT,         "长按通风" },
-        { PK_SETTING_SEAT,         "座位·档位" },
-        { PK_SETTING_STEERING,     "开／关" },
-        { PK_SETTING_FLASH,        "请求闪灯" },
-        { PK_SETTING_HORN,         "请求鸣笛" },
-    };
-    size_t i;
-
-    for (i = 0; i < sizeof(k_labels) / sizeof(k_labels[0]); i++) {
-        if (k_labels[i].id == id) {
-            snprintf(out, n, "%s", k_labels[i].text);
-            return;
-        }
-    }
-    snprintf(out, n, "进入");
-}
-
 static void format_setting_val(const pk_app_t *app, pk_setting_id_t id, char *out, size_t n)
 {
-    const char *blocked;
-
     switch (id) {
     case PK_SETTING_POWER:
         snprintf(out, n, app->power == PK_POWER_ENDURANCE ? "续航优先" : "体验优先");
@@ -109,33 +65,8 @@ static void format_setting_val(const pk_app_t *app, pk_setting_id_t id, char *ou
             snprintf(out, n, "二次确认");
         }
         return;
-    case PK_SETTING_CLIMATE:
-        blocked = setting_vehicle_prereq(app, PK_ACTION_CLIMATE_ON);
-        if (blocked) {
-            snprintf(out, n, "%s", blocked);
-            return;
-        }
-        snprintf(out, n, "%s",
-                 app->caps.climate_on == PK_CAP_YES ? "已开 · 开／关" :
-                 (app->caps.climate_on == PK_CAP_NO ? "已关 · 开／关" : "开／关"));
-        return;
-    case PK_SETTING_DEFOG:
-        blocked = setting_vehicle_prereq(app, PK_ACTION_PRECONDITION_MAX_ON);
-        if (blocked) {
-            snprintf(out, n, "%s", blocked);
-            return;
-        }
-        snprintf(out, n, "%s",
-                 app->caps.preconditioning == PK_CAP_YES ? "已开 · 开／关" :
-                 (app->caps.preconditioning == PK_CAP_NO ? "已关 · 开／关" : "开／关"));
-        return;
     default:
-        blocked = setting_vehicle_prereq(app, pk_setting_action(id));
-        if (blocked) {
-            snprintf(out, n, "%s", blocked);
-            return;
-        }
-        format_parked_setting_val(app, id, out, n);
+        snprintf(out, n, "—");
         return;
     }
 }
@@ -401,10 +332,10 @@ int app_ui_settings_window_start(int focus)
 }
 
 static void format_setting_editor_fields(const pk_app_t *app, char *info, size_t info_n,
-                                         char *f0, size_t f0_n, char *f1, size_t f1_n)
+                                         char *f0, size_t f0_n)
 {
     pk_setting_id_t k = app->edit_key;
-    f0[0] = f1[0] = '\0';
+    f0[0] = '\0';
     switch (k) {
     case PK_SETTING_BRIGHTNESS:
         snprintf(info, info_n, "▲▼ 实时调节亮度，按●保存");
@@ -415,27 +346,6 @@ static void format_setting_editor_fields(const pk_app_t *app, char *info, size_t
         snprintf(f0, f0_n, "模式：%s",
                  app->draft.power == PK_POWER_ENDURANCE ? "续航优先" : "体验优先");
         return;
-    case PK_SETTING_STEERING:
-        snprintf(info, info_n, "显式选择开启或关闭后再保存");
-        snprintf(f0, f0_n, "状态：%s",
-                 app->draft.bool_enabled == PK_CAP_YES ? "开启" :
-                 (app->draft.bool_enabled == PK_CAP_NO ? "关闭" : "待选择"));
-        return;
-    case PK_SETTING_SEAT: {
-        const char *s_name = "待选择";
-        if (app->draft.seat_position == 0) s_name = "主驾(左前)";
-        else if (app->draft.seat_position == 1) s_name = "副驾(右前)";
-        else if (app->draft.seat_position == 2) s_name = "左后";
-        else if (app->draft.seat_position == 4) s_name = "右后";
-        snprintf(info, info_n, "分别选择座位与档位，不群发全车");
-        snprintf(f0, f0_n, "座位：%s", s_name);
-        if (app->draft.seat_level >= 0) {
-            snprintf(f1, f1_n, "加热：%d 档", app->draft.seat_level);
-        } else {
-            snprintf(f1, f1_n, "加热：待选择");
-        }
-        return;
-    }
     default:
         snprintf(info, info_n, "请选择参数后保存");
         snprintf(f0, f0_n, "参数");
@@ -446,13 +356,14 @@ static void format_setting_editor_fields(const pk_app_t *app, char *info, size_t
 static void render_setting_editor(lv_obj_t *body, const pk_app_t *app, const char *msg)
 {
     pk_setting_id_t k = app->edit_key;
-    char f0[48], f1[48], info[128];
+    char f0[48], info[128];
     lv_obj_t *ic;
     int y = 102;
+    bool is_bright = (k == PK_SETTING_BRIGHTNESS);
 
     build_glance_card(body, 6, 52, setting_icon(k), false,
                       setting_title(k), "设置同页编辑，非新菜单");
-    format_setting_editor_fields(app, info, sizeof(info), f0, sizeof(f0), f1, sizeof(f1));
+    format_setting_editor_fields(app, info, sizeof(info), f0, sizeof(f0));
     if (msg && msg[0]) {
         snprintf(info, sizeof(info), "%s", msg);
     }
@@ -461,25 +372,12 @@ static void render_setting_editor(lv_obj_t *body, const pk_app_t *app, const cha
                        COL_CARD_BG, COL_CARD_BORDER, 4);
     (void)create_lbl_wrap(ic, font_12(), COL_MUTED, 8, 3, 208, info);
 
-    if (k == PK_SETTING_SEAT) {
-        build_zone_card(body, y, 32, app->editor_index == 0, false, false,
-                        f0, NULL, (app->editor_index == 0 && app->editing) ? "▲▼ 调节" : "● 编辑");
-        build_zone_card(body, y + 35, 32, app->editor_index == 1, false, false,
-                        f1, NULL, (app->editor_index == 1 && app->editing) ? "▲▼ 调节" : "● 编辑");
-        build_zone_card(body, y + 70, 32, app->editor_index == 2, false, false, "保存当前项", NULL, "●");
-        build_zone_card(body, y + 105, 32, app->editor_index == 3, false, false, "取消草稿", NULL, "●");
-        return;
-    }
-
-    {
-        bool is_bright = (k == PK_SETTING_BRIGHTNESS);
-        build_zone_card(body, y, 42, app->editor_index == 0, false, false, f0, NULL,
-                        (app->editor_index == 0 && app->editing) ? "▲▼ 调节" : "● 编辑");
-        build_zone_card(body, y + 46, 42, app->editor_index == 1, false, false,
-                        "保存当前项", is_bright ? "保存亮度设置并返回" : "确认后执行或生效", "●");
-        build_zone_card(body, y + 92, 42, app->editor_index == 2, false, false,
-                        "取消草稿", is_bright ? "恢复原亮度并返回" : "不发送车辆命令", "●");
-    }
+    build_zone_card(body, y, 42, app->editor_index == 0, false, false, f0, NULL,
+                    (app->editor_index == 0 && app->editing) ? "▲▼ 调节" : "● 编辑");
+    build_zone_card(body, y + 46, 42, app->editor_index == 1, false, false,
+                    "保存当前项", is_bright ? "保存亮度设置并返回" : "确认后执行或生效", "●");
+    build_zone_card(body, y + 92, 42, app->editor_index == 2, false, false,
+                    "取消草稿", is_bright ? "恢复原亮度并返回" : "不发送车辆命令", "●");
 }
 
 void app_ui_render_page_settings(app_ui_ctx_t *ctx, const pk_app_t *app)
