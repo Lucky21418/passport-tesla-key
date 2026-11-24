@@ -25,8 +25,8 @@
 
 /* APP_ICON_BT_CONNECT — Official ID: mdi:bluetooth-connect (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/main-locked.html (and unlocked.html, main-lowbatt.html, driving.html, status.html, cars.html, actuate.html, actuate-trunk-preview.html, delete.html)
- * Source SVG: assets/icons/mdi/bluetooth-connect.svg (SHA-256: fe6a1d7fb4ba4a738cabce8f31f0e1b9954c347dd5cd344c513a864baa9a5b86)
- * <path> d attribute SHA-256: 8a3174258e4f97b7f22edad25121d9190310cf6b4f95a0cc0294ec67928d2524
+ * Source SVG: assets/icons/mdi/bluetooth-connect.svg (SHA-256: d57a7402e5a87faf9db2ab7f22ec890ae42f97e2759167a048b97726c3bb7bd7)
+ * <path> d attribute SHA-256: a43fc6ba82079951e44e98ccaa54c65ac11731bf2466a28340c00b35a3ef793c
  */
 static const uint8_t k_ico_bt_connect[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -53,8 +53,8 @@ static const uint8_t k_ico_bt_connect[400] = {
 
 /* APP_ICON_BT_OFF — Official ID: mdi:bluetooth-off (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/cars.html & ui-approved/html/standby.html
- * Source SVG: assets/icons/mdi/bluetooth-off.svg (SHA-256: 08488c17a008d8b4ea1eb9556e61a595be9e66fe60798e5635f59c61cb1b6eca)
- * <path> d attribute SHA-256: 6d8010dceada6e1ec67f777165d98a704edce2cab51ae878db26e8c5a882ab08
+ * Source SVG: assets/icons/mdi/bluetooth-off.svg (SHA-256: 68102d9b1757b0e9ca0bb14a98fc1e30ff3d6238004064873ba5c66aa1c08529)
+ * <path> d attribute SHA-256: 3e6f06a4adbd1a7f3024957cda25ff8f7b401f71002dff0d10e65be0b43b8ecd
  */
 static const uint8_t k_ico_bt_off[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -81,8 +81,8 @@ static const uint8_t k_ico_bt_off[400] = {
 
 /* APP_ICON_BATT_60 — Official ID: mdi:battery-60 (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/main-locked.html (and unlocked.html, main-unknown.html, driving.html, status.html, actuate.html, actuate-trunk-preview.html, delete.html, retry.html, standby.html, vin.html)
- * Source SVG: assets/icons/mdi/battery-60.svg (SHA-256: 2db043b370ea0a07fa1b397ad31144080ef5479db503dfb5862268e993fec39e)
- * <path> d attribute SHA-256: 061fe689971b65f46b231c72d9fede7dfe8fa585d4f2d054e223056fe0ea1d9e
+ * Source SVG: assets/icons/mdi/battery-60.svg (SHA-256: 92c513f9d0635d1875f240c6c0b4c6ea7a1daaf609ab17e36c638cb6a2a2056d)
+ * <path> d attribute SHA-256: 4bcf23fbb45a82bed199429ab3ab93078d5be256c0ed5e501ae9ecc0663fc5df
  */
 static const uint8_t k_ico_batt_60[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -109,8 +109,8 @@ static const uint8_t k_ico_batt_60[400] = {
 
 /* APP_ICON_BATT_10 — Official ID: mdi:battery-10 (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/main-lowbatt.html
- * Source SVG: assets/icons/mdi/battery-10.svg (SHA-256: 0e9070074ac5c58508a4eeea7ac1596ecca44f2c59eb9fa769831e079c9215b2)
- * <path> d attribute SHA-256: be43da80e13907f88a7f1fe2b6998888c1ac9d7a7c12605ab1567d39f1706d13
+ * Source SVG: assets/icons/mdi/battery-10.svg (SHA-256: c1a7e0a20e1ebb7c75a75ee2efcba016a8965c1b5547e5448c1eb40e84e9f010)
+ * <path> d attribute SHA-256: 4c5281597150f6d70894576d5d89725f597f8d14aec1fe3e22007ce31f08730d
  */
 static const uint8_t k_ico_batt_10[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -165,8 +165,8 @@ static const uint8_t k_ico_tesla_lock[400] = {
 
 /* APP_ICON_LOCK_OPEN — Official ID: mdi:lock-open (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/unlocked.html (and main-lowbatt.html)
- * Source SVG: assets/icons/mdi/lock-open.svg (SHA-256: fa9c6387c0e43d92cca52d0627598ef3515cb9e6befc1b6766c38658ecffba1a)
- * <path> d attribute SHA-256: e7720905d6183499f7a46f40b3af8ffb8e25c1f936bb0bc6202b45dd0b1499cd
+ * Source SVG: assets/icons/mdi/lock-open.svg (SHA-256: 4aa57a48c31d673986ae21dff213cdf2d8330d00c00bfa21931047a9882a5e02)
+ * <path> d attribute SHA-256: 4173f891c4ddee678ae2c939ae69ac41a3ea23fdd4270dc70656c313240e24d3
  */
 static const uint8_t k_ico_lock_open[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1D, 0x1D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -277,8 +277,8 @@ static const uint8_t k_ico_tesla_trunk[400] = {
 
 /* APP_ICON_ALERT — Official ID: mdi:alert (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/main-unknown.html & ui-approved/html/retry.html
- * Source SVG: assets/icons/mdi/alert.svg (SHA-256: c00bfa9286c688ee06d389d8fe6744130eafa329307195b9d4f7296b1d69f3a5)
- * <path> d attribute SHA-256: 4f50bbe14f50cc58699000655e8c48c337d7dd39790d77652bfc5a3f70e6096e
+ * Source SVG: assets/icons/mdi/alert.svg (SHA-256: 625ad5e99e9e1067392edb8ee6bfcf23d01ee7057b68ecdc7623bb6ebdbfc3ba)
+ * <path> d attribute SHA-256: 4357a22c7bc35b7f64f2266979e13915dea9c5d2b4229c72f0fbf649df6108d9
  */
 static const uint8_t k_ico_alert[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -305,8 +305,8 @@ static const uint8_t k_ico_alert[400] = {
 
 /* APP_ICON_CHECK_CIRCLE — Official ID: mdi:check-circle (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/pair.html
- * Source SVG: assets/icons/mdi/check-circle.svg (SHA-256: cba60d5cff35a64b6de7c04a011294728143e0061b55703835c0b0b138d1afb0)
- * <path> d attribute SHA-256: abfcc31a701165683820a400fdf5937ebb341162ae4cc2fdafe388c8ec1bd65e
+ * Source SVG: assets/icons/mdi/check-circle.svg (SHA-256: 5a3b6422d714c524a6d36e111f18c4f7171a6d117e0a9361a9097bc23e0225f6)
+ * <path> d attribute SHA-256: 8fb40d230af48c0c85fec098a986b4d4891ed56db78d9b727fc595c20913c7b8
  */
 static const uint8_t k_ico_check_circle[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -333,8 +333,8 @@ static const uint8_t k_ico_check_circle[400] = {
 
 /* APP_ICON_PLUS — Official ID: mdi:plus (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/cars.html
- * Source SVG: assets/icons/mdi/plus.svg (SHA-256: a82b3e61f15be1073a3f37e1b795dc572d04e653594761a4497b37e72bce6de8)
- * <path> d attribute SHA-256: 43cc874a5393e4bf7b47ff21c6c0f1e289c17a63d21897853d1766a108eb0a71
+ * Source SVG: assets/icons/mdi/plus.svg (SHA-256: ee3d46976b4cc0770b96c220d740b146a8af38b87e60f08f44a456b2799b4ccb)
+ * <path> d attribute SHA-256: e5541f1460bf42f90239c60c34be87d8f35555f77bedfa0ececd3b0dade81717
  */
 static const uint8_t k_ico_plus[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -361,8 +361,8 @@ static const uint8_t k_ico_plus[400] = {
 
 /* APP_ICON_CLIPBOARD — Official ID: mdi:clipboard-text (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/cars.html & ui-approved/html/settings.html (检查驻车资格)
- * Source SVG: assets/icons/mdi/clipboard-text.svg (SHA-256: 0d0daaa6fbd419dd6482e33f2038ab85a4ff7a9ed551305f5d546876adc245a4)
- * <path> d attribute SHA-256: c0a4052d7d269ed7d73b2d2da401d97bb7b39579758b0e425cf336e90935d6fa
+ * Source SVG: assets/icons/mdi/clipboard-text.svg (SHA-256: 5956a2e2df960d785bc52ff946d9f346c496ca867716be7492c364c16623445e)
+ * <path> d attribute SHA-256: 825021023c5f36cd44a8e38e2130c4a4b493edb3841cd9a63a7e63d35f2e3b5f
  */
 static const uint8_t k_ico_clipboard[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x15, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -389,8 +389,8 @@ static const uint8_t k_ico_clipboard[400] = {
 
 /* APP_ICON_COG — Official ID: mdi:cog (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/cars.html & ui-approved/html/settings.html (设置)
- * Source SVG: assets/icons/mdi/cog.svg (SHA-256: 09ee05b5b141dabca293c8584012470b901d76febdae2b384a28a2da58fab678)
- * <path> d attribute SHA-256: 648d853f197dc8326fa5beef414aa40f1af4cfd34aee9ec53869da9ed32019ba
+ * Source SVG: assets/icons/mdi/cog.svg (SHA-256: fab12d6b7d0d923e5191a145ac185a6cc89ce351682aecd065f24f45669990d2)
+ * <path> d attribute SHA-256: c06d9f81957c86f73c92c6fbad33582c733405611d3eea94aca6df4de6829dde
  */
 static const uint8_t k_ico_cog[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -417,8 +417,8 @@ static const uint8_t k_ico_cog[400] = {
 
 /* APP_ICON_MOON — Official ID: mdi:moon-waning-crescent (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/settings.html (省电策略)
- * Source SVG: assets/icons/mdi/moon-waning-crescent.svg (SHA-256: a24a1a2c45ce74427bf379551bfc3b53b4db7a495f559ce41ae2804dde8dddd2)
- * <path> d attribute SHA-256: a58de5d02f9101941f1624b775e3cc052753ae4f13a8082b95dc9f9270d5d184
+ * Source SVG: assets/icons/mdi/moon-waning-crescent.svg (SHA-256: 35d53d5ff68a9ab88bc77f8c547c49e64c8a40c433e131824cedef03411bb585)
+ * <path> d attribute SHA-256: 8d29b23b5be5d84e8b401053c5fd3ea29fe086fe09a296763d603934f3b532e9
  */
 static const uint8_t k_ico_moon[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -473,8 +473,8 @@ static const uint8_t k_ico_brightness[400] = {
 
 /* APP_ICON_THERMOMETER — Official ID: mdi:thermometer (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/status.html
- * Source SVG: assets/icons/mdi/thermometer.svg (SHA-256: 9a0c7a9ca6eea88f1f9f3ebc7d0dc97e1b8e0ce9680029d4e5b5dd8e830677e9)
- * <path> d attribute SHA-256: 0033902f522248cdb5de26dafdead83e4d6fa772f3e16934e044243c053f18d1
+ * Source SVG: assets/icons/mdi/thermometer.svg (SHA-256: 1e5ced03fc762f3481a0e5d547738e83bd5dbf5f818eba30c19cdd0ebcf5449e)
+ * <path> d attribute SHA-256: c96b39160f2089d1c7a7a2bab397cdad92de5474517f825d3c14496f274e496e
  */
 static const uint8_t k_ico_thermometer[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -501,8 +501,8 @@ static const uint8_t k_ico_thermometer[400] = {
 
 /* APP_ICON_WIFI — Official ID: mdi:wifi (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/settings.html (热点)
- * Source SVG: assets/icons/mdi/wifi.svg (SHA-256: fb30fbd73ba3d5a795e931fb579b70c644c695ee7bcf189b6ce52c4bdd88e801)
- * <path> d attribute SHA-256: bab429e17fd11f2d500b48368026705031d64c88b7c75067dc581ac158d0b328
+ * Source SVG: assets/icons/mdi/wifi.svg (SHA-256: 937991f26b8950d68c9939a4db9a0b1ec5450bdbee1b1be8eef6e5e27ae47d52)
+ * <path> d attribute SHA-256: a9a27395b37c16cc8a7b29fd088ba7b9579422472adbf20bc34230c1864083e9
  */
 static const uint8_t k_ico_wifi[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -529,8 +529,8 @@ static const uint8_t k_ico_wifi[400] = {
 
 /* APP_ICON_TRASH — Official ID: mdi:trash-can (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/delete.html & ui-approved/html/settings.html (恢复出厂)
- * Source SVG: assets/icons/mdi/trash-can.svg (SHA-256: 44409c08041010cfe5b55e87930cbceaa701b0d0b595ce9f8ad153bd2c5ec5c0)
- * <path> d attribute SHA-256: 03884ce57a8a708374ebf57f898e314962fefef921ba9fc8f2f008d24968bdcf
+ * Source SVG: assets/icons/mdi/trash-can.svg (SHA-256: c42f4c79e0b84d8800c3a1002e383e721ac322f14d2fdbc05546d358fc9250c5)
+ * <path> d attribute SHA-256: 9788b46cc59cf43d0778f91a64f783c705d2ae369b7c66906e9f3fe0183c1b54
  */
 static const uint8_t k_ico_trash[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -557,8 +557,8 @@ static const uint8_t k_ico_trash[400] = {
 
 /* APP_ICON_CELLPHONE — Official ID: mdi:cellphone (Apache-2.0)
  * Approved HTML Provenance: ui-approved/html/vin.html
- * Source SVG: assets/icons/mdi/cellphone.svg (SHA-256: 02e6c9b8e8f945288e0e1c5023517209c3a14a6d419c1551fb9823f8690bf7ef)
- * <path> d attribute SHA-256: a5d750be1139435877b25e5d0095bc0ea7dffe355e8082391927b87edc27c40a
+ * Source SVG: assets/icons/mdi/cellphone.svg (SHA-256: ad85b0e64a3f16c5f67ed1129d1c3bdf4c327741f0e8d0a6c0838c280c44b507)
+ * <path> d attribute SHA-256: a3667058f0ab4628f3414f552c936b547cce1e50600a40442e10841eb0ec988c
  */
 static const uint8_t k_ico_cellphone[400] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x1A, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x1A, 0x00, 0x00, 0x00, 0x00, 0x00,
