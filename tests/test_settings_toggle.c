@@ -188,6 +188,22 @@ static void test_main_double_opens_status(void)
     app.page = PK_PAGE_MAIN;
     tap_double(&app, 2000);
     expect(app.page == PK_PAGE_STATUS, "main double press opens status");
+
+    /* Connected parked user can reach PK_PAGE_CARS from PK_PAGE_STATUS via ▲ */
+    (void)pk_app_button_edge(&app, 2200, PK_KEY_UP, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 2240, PK_KEY_UP, PK_EDGE_RELEASE);
+    expect(app.page == PK_PAGE_CARS && !app.has_pending,
+           "status UP key opens PK_PAGE_CARS when not driving and cancels status pending");
+
+    /* During driving, ▲ on PK_PAGE_STATUS is blocked and stays on PK_PAGE_STATUS */
+    setup(&app, &ad);
+    app.page = PK_PAGE_MAIN;
+    app.moving = true;
+    tap_double(&app, 3000);
+    expect(app.page == PK_PAGE_STATUS, "driving main double press opens status");
+    (void)pk_app_button_edge(&app, 3200, PK_KEY_UP, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 3240, PK_KEY_UP, PK_EDGE_RELEASE);
+    expect(app.page == PK_PAGE_STATUS, "driving status UP key stays on PK_PAGE_STATUS");
 }
 
 static void test_climate_press_again_turns_off(void)

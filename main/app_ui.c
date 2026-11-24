@@ -228,7 +228,7 @@ static footer_spec_t footer_for_page(const pk_app_t *app)
             : (footer_spec_t){ "▲ 上循环", "● 执行/进入", "▼ 下循环", "双击● 返回",         COL_WHITE };
     case PK_PAGE_STATUS:
         return (footer_spec_t){
-            "▲ —",
+            pk_app_known_motion(app) ? "▲ —" : "▲ 车辆列表",
             app->connected ? "● 重读状态" : ((app->origin == PK_ORIGIN_DRIVING) ? "● 返回主屏" : "● 返回列表"),
             "▼ —", "双击● 返回", COL_WHITE
         };

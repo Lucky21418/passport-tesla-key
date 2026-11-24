@@ -293,7 +293,10 @@ bool pk_side_press(pk_app_t *app, pk_key_id_t key, pk_ms_t t)
         app->side.key = key;
         app->side.at = t;
         app->side.consumed = true;
-        if (app->page == PK_PAGE_STATUS && key == PK_KEY_DOWN) {
+        if (app->page == PK_PAGE_STATUS) {
+            if (key == PK_KEY_UP && !pk_app_known_motion(app)) {
+                (void)pk_app_navigate(app, PK_PAGE_CARS);
+            }
             return false;
         }
         if (app->page == PK_PAGE_QUALIFICATION_OFFER) {
