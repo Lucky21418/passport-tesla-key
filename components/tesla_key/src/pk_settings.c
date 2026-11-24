@@ -19,22 +19,20 @@
  * Audio toggle stays hidden.
  */
 
-static const pk_setting_id_t k_quick_settings[7] = {
-    PK_SETTING_FLASH,
-    PK_SETTING_HORN,
-    PK_SETTING_VENT,
-    PK_SETTING_SENTRY,
-    PK_SETTING_CLIMATE,
-    PK_SETTING_DEFOG,
-    PK_SETTING_PORT
+static const pk_setting_id_t k_basic_settings[5] = {
+    PK_SETTING_BRIGHTNESS,
+    PK_SETTING_POWER,
+    PK_SETTING_LOGS,
+    PK_SETTING_HOTSPOT,
+    PK_SETTING_RESET
 };
 
 const pk_setting_id_t *pk_app_quick_settings(int *out_count)
 {
     if (out_count) {
-        *out_count = (int)(sizeof(k_quick_settings) / sizeof(k_quick_settings[0]));
+        *out_count = (int)(sizeof(k_basic_settings) / sizeof(k_basic_settings[0]));
     }
-    return k_quick_settings;
+    return k_basic_settings;
 }
 
 static int editor_field_count(pk_setting_id_t key)
@@ -224,11 +222,11 @@ void pk_app_settings_arrow(pk_app_t *app, int delta)
     if (!app) {
         return;
     }
-    if (!app->edit_open && app->settings_quick_mode) {
-        int n = (int)(sizeof(k_quick_settings) / sizeof(k_quick_settings[0]));
+    if (!app->edit_open) {
+        int n = (int)(sizeof(k_basic_settings) / sizeof(k_basic_settings[0]));
         int idx = 0;
         for (int i = 0; i < n; i++) {
-            if (k_quick_settings[i] == app->focus) {
+            if (k_basic_settings[i] == app->focus) {
                 idx = i;
                 break;
             }
@@ -237,18 +235,7 @@ void pk_app_settings_arrow(pk_app_t *app, int delta)
         if (idx < 0) {
             idx += n;
         }
-        app->focus = k_quick_settings[idx];
-        return;
-    }
-    if (!app->edit_open) {
-        int k = (int)app->focus + delta;
-        if (k < 0) {
-            k = PK_SETTING_COUNT - 1;
-        }
-        if (k >= PK_SETTING_COUNT) {
-            k = 0;
-        }
-        app->focus = (pk_setting_id_t)k;
+        app->focus = k_basic_settings[idx];
         return;
     }
     if (!app->editing) {

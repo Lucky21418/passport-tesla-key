@@ -363,11 +363,7 @@ void app_ui_render_page_cars(lv_obj_t *body, const pk_app_t *app)
             const char *val = "录入VIN → 配对";
             lv_obj_t *row;
 
-            if (item == PK_LIST_QUICK) {
-                ico = APP_ICON_TESLA_FLASH;
-                ttl = "快捷车控";
-                val = "寻车·通风·哨兵";
-            } else if (item == PK_LIST_STATUS) {
+            if (item == PK_LIST_STATUS) {
                 ico = APP_ICON_CLIPBOARD;
                 ttl = "车辆状态";
                 val = "进入";
@@ -413,14 +409,8 @@ static lv_obj_t *build_setting_row(lv_obj_t *parent, int y, int w,
 
 int app_ui_settings_window_start(int focus)
 {
-    int start = 0;
-    if (focus >= 7) {
-        start = focus - 6;
-    }
-    if (start + 7 > PK_SETTING_COUNT) {
-        start = PK_SETTING_COUNT - 7;
-    }
-    return start;
+    (void)focus;
+    return 0;
 }
 
 static void format_setting_editor_fields(const pk_app_t *app, char *info, size_t info_n,
@@ -505,23 +495,13 @@ static void render_setting_editor(lv_obj_t *body, const pk_app_t *app, const cha
     }
 }
 
-static void render_settings_scrollbar(lv_obj_t *body, int start)
-{
-    const int track_y = 24;
-    const int track_h = 201;
-    const int thumb_h = (track_h * 7) / PK_SETTING_COUNT;
-    const int thumb_y = track_y + ((track_h - thumb_h) * start) / (PK_SETTING_COUNT - 7);
-
-    (void)ui_create_box(body, 232, track_y, 2, track_h, COL_BADGE_BG, 0, 1);
-    (void)ui_create_box(body, 232, thumb_y, 2, thumb_h, COL_MUTED, 0, 1);
-}
-
 void app_ui_render_page_settings(app_ui_ctx_t *ctx, const pk_app_t *app)
 {
     int i;
     int focus = (int)app->focus;
-    int start = 0;
     int y = 4;
+    int b_cnt = 0;
+    const pk_setting_id_t *k_basic = pk_app_quick_settings(&b_cnt);
     const char *msg = pk_copy(app->message);
 
     if (app->edit_open) {
@@ -531,44 +511,19 @@ void app_ui_render_page_settings(app_ui_ctx_t *ctx, const pk_app_t *app)
 
     ctx->settings_row_count = 0;
     ctx->settings_rendered_msg = app->message;
-
-    /* No demo/non-vehicle watermark; helpful top hint. */
-    if (app->settings_quick_mode) {
-        int q_cnt = 0;
-        const pk_setting_id_t *k_quick = pk_app_quick_settings(&q_cnt);
-        create_lbl(ctx->body, font_12(), COL_MUTED, UI_MARGIN_X, y, UI_CONTENT_W,
-                   (msg && msg[0]) ? msg : "常用车控一屏直达，按●执行");
-        y += 20;
-        ctx->settings_rendered_start = 0;
-        ctx->settings_rendered_quick = true;
-        for (i = 0; i < q_cnt && i < 7; i++) {
-            pk_setting_id_t id = k_quick[i];
-            ctx->settings_rows[i] = build_setting_row(ctx->body, y, UI_CONTENT_W, id,
-                                                      (int)id == focus, app);
-            ctx->settings_row_ids[i] = id;
-            ctx->settings_row_count++;
-            y += 29;
-        }
-        return;
-    }
+    ctx->settings_rendered_start = 0;
+    ctx->settings_rendered_quick = app->settings_quick_mode;
 
     create_lbl(ctx->body, font_12(), COL_MUTED, UI_MARGIN_X, y, UI_CONTENT_W,
-               (msg && msg[0]) ? msg : "驻车资格确认后方可执行危险车控");
+               (msg && msg[0]) ? msg : "本机设备设置 · 按●执行或编辑");
     y += 20;
-    start = app_ui_settings_window_start(focus);
-    ctx->settings_rendered_start = start;
-    ctx->settings_rendered_quick = false;
-    for (i = start; i < start + 7 && i < PK_SETTING_COUNT; i++) {
-        pk_setting_id_t id = (pk_setting_id_t)i;
-        int idx = i - start;
-        ctx->settings_rows[idx] = build_setting_row(ctx->body, y, 218, id, i == focus, app);
-        ctx->settings_row_ids[idx] = id;
+    for (i = 0; i < b_cnt && i < 7; i++) {
+        pk_setting_id_t id = k_basic[i];
+        ctx->settings_rows[i] = build_setting_row(ctx->body, y, UI_CONTENT_W, id,
+                                                  (int)id == focus, app);
+        ctx->settings_row_ids[i] = id;
         ctx->settings_row_count++;
-        y += 29;
-    }
-
-    if (PK_SETTING_COUNT > 7) {
-        render_settings_scrollbar(ctx->body, start);
+        y += 32;
     }
 }
 
@@ -857,10 +812,10 @@ void app_ui_render_page_offline(lv_obj_t *body, const pk_app_t *app)
                       drive_warn ? "驾驶中蓝牙断开" : "请先重连",
                       drive_warn ? "勿依赖本设备，注意安全"
                                  : ((msg && msg[0]) ? msg : "车控已禁用，不排队补发"));
-    build_zone_card(body, 75, 52, false, false, true, "寻车闪灯", "单击 ▲", "请先重连");
+    build_zone_card(body, 75, 52, false, false, true, "前备箱", "长按 ▲", "请先重连");
     build_zone_card(body, 132, 52, true, false, false, "重新连接",
                     app->reconnect.active ? "正在有界扫描..." : "发起有界扫描连接", "单击 ●");
-    build_zone_card(body, 189, 52, false, false, true, "寻车鸣笛", "重连后可用", "请先重连");
+    build_zone_card(body, 189, 52, false, false, true, "后备箱", "长按 ▼", "请先重连");
 }
 
 void app_ui_render_page_wait_or_result(lv_obj_t *body, const pk_app_t *app)

@@ -169,8 +169,14 @@ bool pk_app_navigate(pk_app_t *app, pk_page_t page)
         app->lock_alert_active = false;
         app->result_auto_return = false;
     }
-    if (page == PK_PAGE_CARS && pk_store_count(&app->store) == 1) {
-        app->car_focus = PK_LIST_QUICK;
+    if (page == PK_PAGE_CARS) {
+        if (app->vehicle >= 0 && pk_store_slot_used(&app->store, app->vehicle)) {
+            app->car_focus = app->vehicle;
+        } else if (pk_store_count(&app->store) < PK_MAX_VEHICLES) {
+            app->car_focus = PK_LIST_ADD;
+        } else {
+            app->car_focus = 0;
+        }
     }
     pk_arbiter_invalidate(&app->keys);
     app->page = page;

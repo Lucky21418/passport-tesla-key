@@ -102,9 +102,8 @@ static void long_action(pk_app_t *app)
 {
     if (app->page == PK_PAGE_MAIN) {
         if (pk_app_navigate(app, PK_PAGE_SETTINGS)) {
-            app->settings_quick_mode = true;
-            app->focus = PK_SETTING_FLASH;
-            (void)pk_app_probe_caps(app);
+            app->settings_quick_mode = false;
+            app->focus = PK_SETTING_BRIGHTNESS;
         }
         return;
     }

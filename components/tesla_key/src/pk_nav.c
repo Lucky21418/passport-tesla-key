@@ -40,9 +40,6 @@ int pk_app_list_items(const pk_app_t *app, int *out, int max)
         out[n++] = PK_LIST_ADD;
     }
     if (n < max) {
-        out[n++] = PK_LIST_QUICK;
-    }
-    if (n < max) {
         out[n++] = PK_LIST_STATUS;
     }
     if (n < max) {
@@ -115,11 +112,6 @@ bool pk_app_select_list_focus(pk_app_t *app)
     }
     if (focus == PK_LIST_ADD) {
         return pk_app_enter_vin(app);
-    }
-    if (focus == PK_LIST_QUICK) {
-        app->settings_quick_mode = true;
-        app->focus = PK_SETTING_FLASH;
-        return pk_app_navigate(app, PK_PAGE_SETTINGS);
     }
     if (focus == PK_LIST_STATUS) {
         pk_app_open_status(app, PK_ORIGIN_LIST);

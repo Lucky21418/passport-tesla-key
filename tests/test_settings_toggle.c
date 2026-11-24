@@ -161,12 +161,22 @@ static void test_main_long_opens_settings(void)
 {
     pk_app_t app;
     pk_ble_adapter_t ad;
+    int cnt = 0;
+    const pk_setting_id_t *basic = pk_app_quick_settings(&cnt);
 
     setup(&app, &ad);
     app.page = PK_PAGE_MAIN;
     tap_long(&app, 2000);
-    expect(app.page == PK_PAGE_SETTINGS && app.settings_quick_mode,
-           "main long press opens quick controls");
+    expect(app.page == PK_PAGE_SETTINGS && !app.settings_quick_mode &&
+           app.focus == PK_SETTING_BRIGHTNESS,
+           "main long press opens BASIC 5-item settings");
+    expect(cnt == 5 && basic != NULL &&
+           basic[0] == PK_SETTING_BRIGHTNESS &&
+           basic[1] == PK_SETTING_POWER &&
+           basic[2] == PK_SETTING_LOGS &&
+           basic[3] == PK_SETTING_HOTSPOT &&
+           basic[4] == PK_SETTING_RESET,
+           "BASIC settings table exposes exactly 5 device settings");
 }
 
 static void test_main_double_opens_status(void)
@@ -304,6 +314,39 @@ static void test_ack_updates_toggle_direction(void)
            "sentry: next press disables without a readback");
 }
 
+static void test_basic_settings_and_car_list_convergence(void)
+{
+    pk_app_t app;
+    pk_ble_adapter_t ad;
+    int items[8];
+    int n, i;
+
+    setup(&app, &ad);
+    app.page = PK_PAGE_SETTINGS;
+    app.focus = PK_SETTING_BRIGHTNESS;
+
+    /* Arrow navigation on 08 settings cycles strictly through the 5 BASIC items */
+    pk_app_settings_arrow(&app, 1);
+    expect(app.focus == PK_SETTING_POWER, "settings arrow 1 -> POWER");
+    pk_app_settings_arrow(&app, 1);
+    expect(app.focus == PK_SETTING_LOGS, "settings arrow 2 -> LOGS");
+    pk_app_settings_arrow(&app, 1);
+    expect(app.focus == PK_SETTING_HOTSPOT, "settings arrow 3 -> HOTSPOT");
+    pk_app_settings_arrow(&app, 1);
+    expect(app.focus == PK_SETTING_RESET, "settings arrow 4 -> RESET");
+    pk_app_settings_arrow(&app, 1);
+    expect(app.focus == PK_SETTING_BRIGHTNESS, "settings arrow 5 wraps -> BRIGHTNESS");
+    pk_app_settings_arrow(&app, -1);
+    expect(app.focus == PK_SETTING_RESET, "settings arrow -1 wraps -> RESET");
+
+    /* 06 cars list items never include PK_LIST_QUICK */
+    n = pk_app_list_items(&app, items, 8);
+    expect(n > 0, "car list has items");
+    for (i = 0; i < n; i++) {
+        expect(items[i] != PK_LIST_QUICK, "car list does not expose PK_LIST_QUICK");
+    }
+}
+
 int main(void)
 {
     test_short_act_and_double_back();
@@ -315,6 +358,7 @@ int main(void)
     test_defrost_press_again_turns_off();
     test_climate_and_defrost_off_encoding();
     test_ack_updates_toggle_direction();
+    test_basic_settings_and_car_list_convergence();
 
     if (g_fail) {
         fprintf(stderr, "test_settings_toggle: %d failure(s)\n", g_fail);

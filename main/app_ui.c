@@ -102,9 +102,9 @@ static void update_top_bar(const pk_app_t *app)
         l_col = COL_MUTED;
         l_txt = "车辆列表";
     } else if (app->page == PK_PAGE_SETTINGS && !app->edit_open) {
-        l_ico = app->settings_quick_mode ? APP_ICON_TESLA_FLASH : APP_ICON_COG;
+        l_ico = APP_ICON_COG;
         l_col = COL_MUTED;
-        l_txt = app->settings_quick_mode ? "快捷车控" : "设置";
+        l_txt = "设置";
     } else if (app->page == PK_PAGE_STATUS) {
         l_ico = APP_ICON_CLIPBOARD;
         l_col = COL_MUTED;
