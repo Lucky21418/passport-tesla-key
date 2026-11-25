@@ -8,7 +8,7 @@
  * 所有【待真机】门禁在未适配前不得把这些初值写成已测保证。
  */
 
-#define PK_DOUBLE_MS                 180u
+#define PK_DOUBLE_MS                 300u
 #define PK_MAIN_HOLD_MS              500u
 #define PK_DANGER_HOLD_MS            500u
 #define PK_QUALIFICATION_READ_MS     4000u
@@ -63,14 +63,17 @@
 #define PK_BRIGHTNESS_MAX            100
 
 /* BSP voltage-lock delays: aligned to official BSP 40 ms press confirm and
- * 120 ms release hold (P1 adjudication).
+ * 120 ms cross-window / side-key hold (P1 adjudication), while clean ● release
+ * into the >= 1900 mV idle band uses symmetric 40 ms confirmation so rapid
+ * double-taps are not merged or inflated by +80 ms.
  */
 #define PK_BSP_BTN_CONFIRM_MS        40u
 #define PK_BSP_BTN_HOLD_MS           120u
+#define PK_BTN_DOT_RELEASE_MS        40u
 
-/* Raw-edge timing follows the BSP/shipped-product values: 180 ms click/double
- * window, 500 ms long press. The app does not consume cooked BSP events; the
- * adapter feeds raw edges and this state machine applies the same contract.
+/* Raw-edge timing: 300 ms product double-click window, 500 ms long press.
+ * The app does not consume cooked BSP events; the adapter feeds raw edges and
+ * this state machine applies the product contract.
  */
 
 #endif /* PK_POLICY_H */

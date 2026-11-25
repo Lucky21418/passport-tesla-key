@@ -15,29 +15,88 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/task.h"
 
 #include <stdio.h>
 #include <string.h>
 
 static const char *TAG = "app_ports";
 
-#define PORT_RX_POOL_SLOTS 4
+#define PORT_RX_POOL_SLOTS     4
+#define BTN_SAMPLE_PERIOD_US   5000
 
 typedef struct {
     bool    in_use;
     uint8_t data[PK_PROTO_MAX_FRAME_LEN];
 } port_rx_slot_t;
 
-static QueueHandle_t    s_ev_queue;
-static TaskHandle_t     s_main_task;
-static pk_app_t        *s_bound_app;
-static pk_ble_adapter_t *s_bound_ble;
-static port_rx_slot_t   s_rx_pool[PORT_RX_POOL_SLOTS];
-static portMUX_TYPE     s_rx_pool_mux = portMUX_INITIALIZER_UNLOCKED;
+static QueueHandle_t        s_ev_queue;
+static TaskHandle_t         s_main_task;
+static pk_app_t            *s_bound_app;
+static pk_ble_adapter_t    *s_bound_ble;
+static port_rx_slot_t       s_rx_pool[PORT_RX_POOL_SLOTS];
+static portMUX_TYPE         s_rx_pool_mux = portMUX_INITIALIZER_UNLOCKED;
+static esp_timer_handle_t   s_btn_timer;
+static pk_btn_sample_ring_t s_btn_ring;
+static portMUX_TYPE         s_btn_mux = portMUX_INITIALIZER_UNLOCKED;
+static volatile int         s_latest_btn_mv = -1;
 
 pk_ms_t port_now_ms(void)
 {
     return (pk_ms_t)(esp_timer_get_time() / 1000);
+}
+
+static void btn_sample_timer_cb(void *arg)
+{
+    int s0, s1, s2, mv;
+    bool valid = false;
+    bool edge_changed = false;
+    pk_ms_t ts;
+
+    (void)arg;
+    ts = port_now_ms();
+    s0 = bsp_button_read_mv();
+    s1 = bsp_button_read_mv();
+    s2 = bsp_button_read_mv();
+    mv = pk_btn_median3(s0, s1, s2, &valid);
+    s_latest_btn_mv = valid ? mv : -1;
+
+    portENTER_CRITICAL(&s_btn_mux);
+    edge_changed = pk_btn_ring_push(&s_btn_ring, ts, mv, valid);
+    portEXIT_CRITICAL(&s_btn_mux);
+
+    if (edge_changed && s_main_task) {
+        xTaskNotifyGive(s_main_task);
+    }
+}
+
+static void stop_btn_sample_timer(void)
+{
+    if (!s_btn_timer) {
+        return;
+    }
+    (void)esp_timer_stop(s_btn_timer);
+    (void)esp_timer_delete(s_btn_timer);
+    s_btn_timer = NULL;
+}
+
+bool app_ports_pop_button_sample(pk_btn_sample_t *out)
+{
+    bool ok;
+
+    portENTER_CRITICAL(&s_btn_mux);
+    ok = pk_btn_ring_pop(&s_btn_ring, out);
+    portEXIT_CRITICAL(&s_btn_mux);
+    return ok;
+}
+
+int app_ports_latest_button_mv(void)
+{
+    int mv = s_latest_btn_mv;
+    if (mv >= 0) {
+        return mv;
+    }
+    return bsp_button_read_mv();
 }
 
 int port_rx_buf_alloc_copy(const uint8_t *data, size_t len)
@@ -94,6 +153,9 @@ bool port_post_event(const port_event_t *ev)
         ESP_LOGW(TAG, "event queue full: type=%d drops=%u",
                  (int)ev->type, (unsigned)s_ev_queue_drops);
         return false;
+    }
+    if (s_main_task) {
+        xTaskNotifyGive(s_main_task);
     }
     return true;
 }
@@ -233,6 +295,28 @@ void app_ports_init(pk_app_t *app, pk_btn_adapter_t *btn, pk_ble_adapter_t *ble)
     pk_btn_adapter_init(btn, app);
     btn->adc.read_mv = adc_read_mv;
     btn->adc.read_ctx = NULL;
+
+    portENTER_CRITICAL(&s_btn_mux);
+    pk_btn_ring_init(&s_btn_ring);
+    portEXIT_CRITICAL(&s_btn_mux);
+    s_latest_btn_mv = bsp_button_read_mv();
+    if (!s_btn_timer) {
+        const esp_timer_create_args_t tcfg = {
+            .callback = btn_sample_timer_cb,
+            .arg = NULL,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "pk_btn_5ms",
+            .skip_unhandled_events = true,
+        };
+        if (esp_timer_create(&tcfg, &s_btn_timer) == ESP_OK) {
+            if (esp_timer_start_periodic(s_btn_timer, BTN_SAMPLE_PERIOD_US) != ESP_OK) {
+                (void)esp_timer_delete(s_btn_timer);
+                s_btn_timer = NULL;
+            }
+        } else {
+            s_btn_timer = NULL;
+        }
+    }
 
     port_ble_init_and_attach(app, ble);
 
@@ -414,6 +498,9 @@ bool app_ports_enter_deep_sleep(void)
     }
 
     ESP_LOGI(TAG, "进入续航深度休眠 (GPIO0 低电平唤醒)");
+    /* Stop and delete the 5 ms button ADC sampler BEFORE tearing down the
+     * shared ADC unit in bsp_button_prepare_deep_sleep(). */
+    stop_btn_sample_timer();
     port_ble_deinit();
 
     /* The button must be released before the teardown starts. A held key would

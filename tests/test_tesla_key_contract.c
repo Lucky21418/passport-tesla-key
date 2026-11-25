@@ -2968,6 +2968,195 @@ static void test_sentry_idle_and_defrost_mode(void)
     }
 }
 
+static void feed_adc_span(pk_app_t *app, pk_btn_adapter_t *btn,
+                          pk_ms_t start_ms, pk_ms_t end_ms,
+                          int mv, bool valid)
+{
+    pk_ms_t t;
+    for (t = start_ms; t < end_ms; t += 5u) {
+        (void)pk_btn_adapter_feed_mv(btn, t, mv, valid);
+        (void)pk_app_tick(app, t);
+    }
+}
+
+static void setup_connected_main_for_keys(pk_app_t *app, pk_ble_adapter_t *ad,
+                                          pk_btn_adapter_t *btn)
+{
+    g_cap_writes = 0;
+    pk_app_init(app, PK_VEHICLE_NONE, true);
+    pk_ble_adapter_init(ad);
+    ad->radio.write_once = capture_write;
+    ad->radio.connect_once = fake_connect;
+    ad->radio.disconnect = fake_disconnect;
+    ad->radio.cancel = fake_cancel;
+    ad->radio.has_session = fake_has_session;
+    pk_ble_adapter_attach(app, ad);
+    expect(add_and_select(app, VIN_A) >= 0, "optE: add VIN_A");
+    ad->connected_slot = app->vehicle;
+    pk_app_set_connected(app, true);
+    pk_app_tick(app, 1000);
+    app->awake = true;
+    app->page = PK_PAGE_MAIN;
+    pk_btn_adapter_init(btn, app);
+}
+
+static void test_double_click_option_e_regressions(void)
+{
+    pk_app_t app;
+    pk_ble_adapter_t ad;
+    pk_btn_adapter_t btn;
+
+    /* 0. Pure 3-sample median filter rejects single-sample spikes and
+     * preserves invalid when < 2 samples are valid. */
+    {
+        bool valid = false;
+        expect(pk_btn_median3(303, 3300, 305, &valid) == 305 && valid,
+               "optE: median3 rejects single high spike");
+        expect(pk_btn_median3(-1, 303, 307, &valid) == 305 && valid,
+               "optE: median3 averages 2 valid samples");
+        expect(pk_btn_median3(-1, -1, 303, &valid) == -1 && !valid,
+               "optE: median3 stays invalid when < 2 valid");
+    }
+
+    /* 1. Fast double-click: 60 ms and 90 ms physical release gaps must
+     * produce a double-click (MAIN -> STATUS), never a single click, long
+     * press, or vehicle command write. */
+    {
+        const pk_ms_t gaps[2] = { 60u, 90u };
+        size_t i;
+        for (i = 0; i < 2; i++) {
+            pk_ms_t t = 1100u;
+            pk_ms_t gap = gaps[i];
+            setup_connected_main_for_keys(&app, &ad, &btn);
+            feed_adc_span(&app, &btn, t, t + 100u, 303, true);          t += 100u;
+            feed_adc_span(&app, &btn, t, t + gap, 2950, true);          t += gap;
+            feed_adc_span(&app, &btn, t, t + 100u, 303, true);          t += 100u;
+            feed_adc_span(&app, &btn, t, t + 500u, 2950, true);
+            expect(app.page == PK_PAGE_STATUS && g_cap_writes == 1 &&
+                   g_cap_frame.action == PK_ACTION_STATUS_READ,
+                   "optE: fast double-click (60/90 ms gap) opens STATUS, no LOCK/SETTINGS");
+        }
+    }
+
+    /* 2. Slow double-click: 220 ms and 260 ms physical release gaps on
+     * SETTINGS must return to MAIN without splitting into two single clicks. */
+    {
+        const pk_ms_t gaps[2] = { 220u, 260u };
+        size_t i;
+        for (i = 0; i < 2; i++) {
+            pk_ms_t t = 1100u;
+            pk_ms_t gap = gaps[i];
+            setup_connected_main_for_keys(&app, &ad, &btn);
+            app.page = PK_PAGE_SETTINGS;
+            app.focus = PK_SETTING_BRIGHTNESS;
+            feed_adc_span(&app, &btn, t, t + 100u, 303, true);          t += 100u;
+            feed_adc_span(&app, &btn, t, t + gap, 2950, true);          t += gap;
+            feed_adc_span(&app, &btn, t, t + 100u, 303, true);          t += 100u;
+            feed_adc_span(&app, &btn, t, t + 500u, 2950, true);
+            expect(app.page == PK_PAGE_MAIN && !app.edit_open && g_cap_writes == 0,
+                   "optE: slow double-click (220/260 ms gap) returns MAIN without click");
+        }
+    }
+
+    /* 3. Main-loop stall (~70 ms) after first release: 5 ms samples buffered
+     * in pk_btn_sample_ring_t are drained with their real timestamps before
+     * pk_app_tick(late_now), so double-click still wins even when late_now > deadline. */
+    {
+        pk_btn_sample_ring_t ring;
+        pk_btn_sample_t samp;
+        pk_ms_t t;
+        pk_ms_t late_now;
+
+        setup_connected_main_for_keys(&app, &ad, &btn);
+        app.page = PK_PAGE_SETTINGS;
+        app.focus = PK_SETTING_BRIGHTNESS;
+        pk_btn_ring_init(&ring);
+
+        /* First press (1100..1180) and release (1180..1240 -> RELEASE at 1220, deadline=1520). */
+        feed_adc_span(&app, &btn, 1100u, 1460u, 303, false); /* unused */
+        setup_connected_main_for_keys(&app, &ad, &btn);
+        app.page = PK_PAGE_SETTINGS;
+        app.focus = PK_SETTING_BRIGHTNESS;
+        feed_adc_span(&app, &btn, 1100u, 1180u, 303, true);
+        feed_adc_span(&app, &btn, 1180u, 1460u, 2950, true);
+        expect(app.keys.deadline_valid, "optE stall: deadline armed after first release");
+
+        /* Main loop stalls for 70 ms (1460..1535) while 5 ms timer buffers
+         * the second press starting at t=1460 (confirms at t=1500 <= deadline 1520). */
+        for (t = 1460u; t <= 1535u; t += 5u) {
+            (void)pk_btn_ring_push(&ring, t, 303, true);
+        }
+        late_now = 1535u; /* past deadline 1520 */
+        while (pk_btn_ring_pop(&ring, &samp)) {
+            (void)pk_btn_adapter_feed_mv(&btn, samp.ts_ms, samp.mv, samp.valid);
+        }
+        (void)pk_app_tick(&app, late_now);
+        /* Release second press */
+        feed_adc_span(&app, &btn, 1540u, 1620u, 2950, true);
+        expect(app.page == PK_PAGE_MAIN && !app.edit_open && g_cap_writes == 0,
+               "optE: 70 ms main-loop stall after release still recognizes double-click");
+    }
+
+    /* 4. ● release sweeping through ▼ window (600 mV for 15 ms) must not emit
+     * PK_KEY_DOWN; an 80 ms cross-window glitch while holding ● is absorbed by
+     * the 120 ms cross-window lock. */
+    {
+        setup_connected_main_for_keys(&app, &ad, &btn);
+        app.page = PK_PAGE_SETTINGS;
+        app.focus = PK_SETTING_BRIGHTNESS;
+        feed_adc_span(&app, &btn, 1100u, 1200u, 303, true);
+        /* 80 ms cross-window glitch into ▼ (600 mV) then back to ● (303 mV) */
+        feed_adc_span(&app, &btn, 1200u, 1280u, 600, true);
+        feed_adc_span(&app, &btn, 1280u, 1340u, 303, true);
+        expect(app.focus == PK_SETTING_BRIGHTNESS && !app.side.active,
+               "optE: 80 ms cross-window glitch absorbed by 120 ms lock");
+        /* Release sweeping through ▼ for 15 ms then idle 2950 mV */
+        feed_adc_span(&app, &btn, 1340u, 1355u, 600, true);
+        feed_adc_span(&app, &btn, 1355u, 1450u, 2950, true);
+        expect(app.focus == PK_SETTING_BRIGHTNESS && !app.side.active,
+               "optE: release sweep through DOWN window emits no DOWN key");
+    }
+
+    /* 5. Invalid/failed ADC readings (60 ms) during ● hold must NOT release ●
+     * early; 120 ms keep-alive holds the key and 500 ms long press still fires. */
+    {
+        setup_connected_main_for_keys(&app, &ad, &btn);
+        feed_adc_span(&app, &btn, 1100u, 1300u, 303, true);
+        feed_adc_span(&app, &btn, 1300u, 1360u, -1, false);
+        expect(app.keys.down, "optE: 60 ms invalid ADC does not release DOT early");
+        feed_adc_span(&app, &btn, 1360u, 1750u, 303, true);
+        expect(app.page == PK_PAGE_SETTINGS,
+               "optE: DOT long-press still fires after 60 ms invalid ADC glitch");
+    }
+
+    /* 6. Physical 430 ms hold (< 500 ms) must be a single-click, not inflated
+     * by +80 ms into a 500 ms long-press. */
+    {
+        setup_connected_main_for_keys(&app, &ad, &btn);
+        feed_adc_span(&app, &btn, 1100u, 1530u, 303, true);  /* 430 ms physical hold */
+        feed_adc_span(&app, &btn, 1530u, 2000u, 2950, true); /* release + >300 ms */
+        expect(app.page == PK_PAGE_MAIN && g_cap_writes == 1 &&
+               g_cap_frame.action == PK_ACTION_LOCK,
+               "optE: 430 ms physical hold commits single-click LOCK, not 500 ms SETTINGS");
+    }
+
+    /* 7. Background park-grant expiry during an active double-click window
+     * must not clear deadline_valid. */
+    {
+        setup_connected_main_for_keys(&app, &ad, &btn);
+        grant_park(&app);
+        app.grant.until = 1300u; /* expires mid-double-click window */
+        feed_adc_span(&app, &btn, 1100u, 1180u, 303, true);
+        feed_adc_span(&app, &btn, 1180u, 1360u, 2950, true); /* grant expires at 1300 */
+        expect(!app.has_grant && app.keys.deadline_valid,
+               "optE: background grant expiry preserves active double-click deadline");
+        feed_adc_span(&app, &btn, 1360u, 1440u, 303, true);
+        feed_adc_span(&app, &btn, 1440u, 1520u, 2950, true);
+        expect(app.page == PK_PAGE_STATUS,
+               "optE: double-click completes across background grant expiry");
+    }
+}
+
 int main(void)
 {
     test_unwired_not_success();
@@ -3018,6 +3207,7 @@ int main(void)
     test_status_learned_fault25();
     test_plaintext_vehicledata_parses_to_p();
     test_sentry_idle_and_defrost_mode();
+    test_double_click_option_e_regressions();
     if (g_fail) {
         fprintf(stderr, "%d contract check(s) failed\n", g_fail);
         return 1;

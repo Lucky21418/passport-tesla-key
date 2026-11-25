@@ -134,11 +134,11 @@ static pk_qualify_sample_t sample_for(const pk_app_t *app, pk_shift_t shift)
 
 static void test_frozen_timing(void)
 {
-    expect(PK_DOUBLE_MS == 180u && PK_MAIN_HOLD_MS == 500u &&
+    expect(PK_DOUBLE_MS == 300u && PK_MAIN_HOLD_MS == 500u &&
            PK_DANGER_HOLD_MS == 500u && PK_BSP_BTN_CONFIRM_MS == 40u &&
-           PK_BSP_BTN_HOLD_MS == 120u && PK_PARK_FRESH_MS == 1000u &&
-           PK_PARK_LEASE_MS == 60000u && PK_LOCK_VERIFY_MS == 3000u &&
-           PK_STUCK_KEY_MS == 10000u,
+           PK_BSP_BTN_HOLD_MS == 120u && PK_BTN_DOT_RELEASE_MS == 40u &&
+           PK_PARK_FRESH_MS == 1000u && PK_PARK_LEASE_MS == 60000u &&
+           PK_LOCK_VERIFY_MS == 3000u && PK_STUCK_KEY_MS == 10000u,
            "frozen timing constants");
     expect((key_stuck_loop_policy(KEY_STUCK_RELEASED) & KEY_STUCK_POLICY_DIRECT_SLEEP) == 0 &&
            (key_stuck_loop_policy(KEY_STUCK_ENTER) & KEY_STUCK_POLICY_PUMP) != 0,

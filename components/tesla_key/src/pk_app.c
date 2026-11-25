@@ -160,7 +160,10 @@ void pk_app_expire_state(pk_app_t *app, pk_ms_t t)
     if (app->has_grant && pk_time_due(t, app->grant.until)) {
         pk_grant_clear(&app->grant);
         app->has_grant = false;
-        pk_app_bump_generation(app);
+        /* Advance scope generation so any frozen intent captured under the
+         * expired grant re-evaluates at commit, without clearing an in-progress
+         * double-click deadline_valid or held ● gesture. */
+        app->generation++;
     }
     expire_pending(app);
     if (app->lock_alert_active && pk_time_due(t, app->lock_alert_until)) {

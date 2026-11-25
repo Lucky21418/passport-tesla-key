@@ -15,6 +15,8 @@
  */
 void app_ports_init(pk_app_t *app, pk_btn_adapter_t *btn, pk_ble_adapter_t *ble);
 void app_ports_poll_buttons(pk_btn_adapter_t *btn, pk_ms_t now);
+bool app_ports_pop_button_sample(pk_btn_sample_t *out);
+int app_ports_latest_button_mv(void);
 void app_ports_poll_events(pk_app_t *app, pk_ms_t now);
 void app_ports_refresh_battery(pk_app_t *app);
 

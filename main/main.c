@@ -148,11 +148,13 @@ void app_main(void)
     bool was_low_batt = s_app.low_battery;
 
     for (;;) {
-        const pk_ms_t now = now_ms();
-        const int mv = bsp_button_read_mv();
-        const bool key_pressed = (mv >= 0 && mv < PK_BTN_MV_RELEASED_MIN);
+        pk_btn_sample_t samp;
+        bool drained_any = false;
+        const pk_ms_t loop_start_ms = now_ms();
+        const int latest_mv = app_ports_latest_button_mv();
+        bool key_pressed = (latest_mv >= 0 && latest_mv < PK_BTN_MV_RELEASED_MIN);
         const key_stuck_action_t stuck_act =
-            key_stuck_update(&s_stuck_guard, key_pressed, now, PK_STUCK_KEY_MS);
+            key_stuck_update(&s_stuck_guard, key_pressed, loop_start_ms, PK_STUCK_KEY_MS);
 
         const unsigned stuck_policy = key_stuck_loop_policy(stuck_act);
 
@@ -164,8 +166,34 @@ void app_main(void)
         }
 
         poll_key_wake_guard();
-        if ((stuck_policy & KEY_STUCK_POLICY_SUPPRESS_NEW) == 0 && !s_key_guard.armed) {
-            (void)pk_btn_adapter_feed_mv(&s_btn, now, mv, mv >= 0);
+        while (app_ports_pop_button_sample(&samp)) {
+            drained_any = true;
+            key_pressed = (samp.valid && samp.mv >= 0 && samp.mv < PK_BTN_MV_RELEASED_MIN);
+            if (s_key_guard.armed) {
+                const bool released = (samp.valid && samp.mv >= PK_BTN_MV_RELEASED_MIN);
+                if (key_guard_consume(&s_key_guard, released, (int64_t)samp.ts_ms * 1000) &&
+                    !s_key_guard.armed) {
+                    ESP_LOGI(TAG, "唤醒键已松手，按键恢复响应");
+                }
+                continue;
+            }
+            if ((stuck_policy & KEY_STUCK_POLICY_SUPPRESS_NEW) == 0) {
+                (void)pk_btn_adapter_feed_mv(&s_btn, samp.ts_ms, samp.mv, samp.valid);
+            }
+        }
+        if (!drained_any && (stuck_policy & KEY_STUCK_POLICY_SUPPRESS_NEW) == 0 &&
+            !s_key_guard.armed) {
+            pk_ms_t fb_ms = now_ms();
+            const int fb_mv = bsp_button_read_mv();
+            if (s_btn.time_set && pk_time_before(fb_ms, s_btn.last_ms)) {
+                fb_ms = s_btn.last_ms;
+            }
+            key_pressed = (fb_mv >= 0 && fb_mv < PK_BTN_MV_RELEASED_MIN);
+            (void)pk_btn_adapter_feed_mv(&s_btn, fb_ms, fb_mv, fb_mv >= 0);
+        }
+        pk_ms_t now = now_ms();
+        if (s_app.time_set && pk_time_before(now, s_app.now)) {
+            now = s_app.now;
         }
         app_ports_poll_events(&s_app, now);
         (void)pk_app_tick(&s_app, now);

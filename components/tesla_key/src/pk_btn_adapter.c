@@ -101,12 +101,13 @@ pk_err_t pk_btn_adapter_feed_mv(pk_btn_adapter_t *ad, pk_ms_t now, int mv, bool 
 {
     int window;
     int previous;
+    bool clean_release_sample = false;
     pk_ms_t need;
 
     if (!ad) {
         return PK_ERR_INVALID;
     }
-    if (ad->time_set && now < ad->last_ms) {
+    if (ad->time_set && pk_time_before(now, ad->last_ms)) {
         return PK_ERR_INVALID;
     }
     ad->last_ms = now;
@@ -117,37 +118,48 @@ pk_err_t pk_btn_adapter_feed_mv(pk_btn_adapter_t *ad, pk_ms_t now, int mv, bool 
         window = -1;
     } else {
         window = window_of(mv, true);
+        clean_release_sample = (window < 0 && mv >= PK_BTN_MV_RELEASED_MIN);
     }
 
-    /* Voltage lock: idle new window must stay stable CONFIRM_MS before
-     * it is a press; once locked, any other reading (including released
-     * or a failed sample) must stay stable HOLD_MS before it is accepted.
-     * Brief contact gaps are absorbed. This is not a click / long-press
-     * state machine and does not use 180 / 500 ms cooked timings.
+    /* Voltage lock: idle new window must stay stable CONFIRM_MS (40 ms) before
+     * it is a press; once locked, cross-window sweeps, ▲/▼ holds, and invalid/
+     * failed ADC samples must stay stable HOLD_MS (120 ms) before accepted.
+     * Only when ● returns cleanly to the valid >= 1900 mV idle band for every
+     * sample in the streak does release confirm at PK_BTN_DOT_RELEASE_MS (40 ms),
+     * preserving fast double-clicks and symmetric hold duration.
      */
     if (window == ad->locked) {
         ad->pending = false;
         ad->candidate = -1;
+        ad->candidate_clean_release = false;
         return PK_OK;
     }
     if (!ad->pending || window != ad->candidate) {
         ad->pending = true;
         ad->candidate = window;
+        ad->candidate_clean_release = clean_release_sample;
         ad->since_ms = now;
         return PK_OK;
     }
-    need = (ad->locked < 0) ? (pk_ms_t)PK_BSP_BTN_CONFIRM_MS : (pk_ms_t)PK_BSP_BTN_HOLD_MS;
-    if (now - ad->since_ms < need) {
+    if (!clean_release_sample) {
+        ad->candidate_clean_release = false;
+    }
+    if (ad->locked < 0) {
+        need = (pk_ms_t)PK_BSP_BTN_CONFIRM_MS;
+    } else if (pk_btn_ladder_key(ad->locked) == PK_KEY_DOT &&
+               ad->candidate < 0 && ad->candidate_clean_release) {
+        need = (pk_ms_t)PK_BTN_DOT_RELEASE_MS;
+    } else {
+        need = (pk_ms_t)PK_BSP_BTN_HOLD_MS;
+    }
+    if (!pk_time_elapsed(now, ad->since_ms, need)) {
         return PK_OK;
     }
     previous = ad->locked;
     ad->locked = ad->candidate;
     ad->pending = false;
     ad->candidate = -1;
-    /* Reported edge time is after the lock delay (~40 ms down, ~120 ms
-     * up). Application thresholds stay defined on this raw-edge watermark
-     * and must be calibrated on device (docs/BSP-ADAPTER.md).
-     */
+    ad->candidate_clean_release = false;
     return emit_lock_change(ad, now, previous, ad->locked);
 }
 
@@ -180,7 +192,7 @@ pk_err_t pk_btn_adapter_on_bsp_event(pk_btn_adapter_t *ad, pk_ms_t now,
     }
     if (ev == PK_BTN_SRC_COOKED_CLICK || ev == PK_BTN_SRC_COOKED_DOUBLE ||
         ev == PK_BTN_SRC_COOKED_LONG) {
-        /* The app owns the raw-edge 180 ms / 500 ms contract. Cooked
+        /* The app owns the raw-edge 300 ms / 500 ms contract. Cooked
          * iot_button events would pre-empt it; drop them rather than
          * wrapping another click/long state machine.
          */
@@ -223,4 +235,105 @@ pk_err_t pk_btn_adapter_power_edge(pk_btn_adapter_t *ad, pk_ms_t now, pk_edge_t 
         ad->power_down = false;
     }
     return pk_app_button_edge(ad->app, now, PK_KEY_POWER, edge);
+}
+
+int pk_btn_median3(int s0, int s1, int s2, bool *out_valid)
+{
+    int vals[3];
+    int n = 0;
+
+    if (s0 >= 0) {
+        vals[n++] = s0;
+    }
+    if (s1 >= 0) {
+        vals[n++] = s1;
+    }
+    if (s2 >= 0) {
+        vals[n++] = s2;
+    }
+    if (n < 2) {
+        if (out_valid) {
+            *out_valid = false;
+        }
+        return -1;
+    }
+    if (out_valid) {
+        *out_valid = true;
+    }
+    if (n == 2) {
+        return (vals[0] + vals[1]) / 2;
+    }
+    if (vals[0] > vals[1]) {
+        int tmp = vals[0];
+        vals[0] = vals[1];
+        vals[1] = tmp;
+    }
+    if (vals[1] > vals[2]) {
+        int tmp = vals[1];
+        vals[1] = vals[2];
+        vals[2] = tmp;
+    }
+    if (vals[0] > vals[1]) {
+        int tmp = vals[0];
+        vals[0] = vals[1];
+        vals[1] = tmp;
+    }
+    return vals[1];
+}
+
+void pk_btn_ring_init(pk_btn_sample_ring_t *ring)
+{
+    if (!ring) {
+        return;
+    }
+    memset(ring, 0, sizeof(*ring));
+    ring->last_window = -1;
+}
+
+bool pk_btn_ring_push(pk_btn_sample_ring_t *ring, pk_ms_t ts_ms, int mv, bool valid)
+{
+    uint8_t write_idx;
+    int8_t win;
+    bool changed;
+
+    if (!ring) {
+        return false;
+    }
+    if (mv > 32767) {
+        mv = 32767;
+    } else if (mv < -1) {
+        mv = -1;
+    }
+    win = (int8_t)window_of(mv, valid);
+    changed = !ring->has_last_window || (win != ring->last_window);
+    ring->last_window = win;
+    ring->has_last_window = true;
+
+    if (ring->count >= PK_BTN_RING_CAP) {
+        /* Overwrite oldest so fresh edge timestamps are never lost under a stall. */
+        write_idx = ring->head;
+        ring->head = (uint8_t)((ring->head + 1u) % PK_BTN_RING_CAP);
+    } else {
+        write_idx = (uint8_t)((ring->head + ring->count) % PK_BTN_RING_CAP);
+        ring->count++;
+    }
+    ring->buf[write_idx] = (pk_btn_sample_t){
+        .ts_ms = ts_ms,
+        .mv = (int16_t)mv,
+        .valid = valid && mv >= 0,
+    };
+    return changed;
+}
+
+bool pk_btn_ring_pop(pk_btn_sample_ring_t *ring, pk_btn_sample_t *out)
+{
+    if (!ring || ring->count == 0u) {
+        return false;
+    }
+    if (out) {
+        *out = ring->buf[ring->head];
+    }
+    ring->head = (uint8_t)((ring->head + 1u) % PK_BTN_RING_CAP);
+    ring->count--;
+    return true;
 }

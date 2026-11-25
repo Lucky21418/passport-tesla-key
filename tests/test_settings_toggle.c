@@ -1,8 +1,8 @@
 /*
- * Host tests for the 2026-11-18 gesture/confirmation contract.
+ * Host tests for the gesture/confirmation contract.
  *
  * Grammar: short = act, double = back/status, long = high-consequence action.
- * Timing: 180 ms double window / 500 ms hold (FoloToy BSP + shipped 1234/1149).
+ * Timing: 300 ms double window / 500 ms hold (40 ms DOT clean-release confirm).
  * ACK is terminal for the app; state is refreshed by explicit reads, never by
  * a timer-based readback.
  */

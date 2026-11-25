@@ -38,7 +38,7 @@ Per the user-confirmed Basic Edition workflow update on 2026-11-24, subsequent B
 6. **Post-Test Formal Adjudication & Delivery (`P03`, `P17`)**: Formal adjudication and delivery are performed after the consolidated device test, covering former `P03` and `P17`.
 7. **Targeted Retest Only on Must-Fix Issues**: If the consolidated device test uncovers must-fix defects, ship a targeted fix build for retest rather than testing repeatedly during development.
 8. **Single-Item Dispatch & Vehicle Safety Boundary**: Task dispatch remains strictly one item at a time; live-vehicle pairing and live-vehicle control are not executed.
-9. **Double-Click Mis-Trigger Status (Pending Joint Decision)**: Double-click mis-triggering remains under independent analysis and has not been jointly decided; keep timing unchanged under an "analyze first and decide jointly before modifying" hold, without treating any unconfirmed timing proposal as settled.
+9. **Double-Click Mis-Trigger Status (Option E Jointly Confirmed)**: Jointly confirmed Option E (`PK_DOUBLE_MS = 300 ms`, symmetric `40 ms` clean-release confirmation for `●` at valid `>= 1900 mV` while preserving `120 ms` cross-window / side-key / invalid-ADC hold, `5 ms` `esp_timer` median-filtered sampling with real sample timestamps and pre-deep-sleep timer teardown, and preserving active gesture windows across unrelated background expiry); on-device feel verification remains deferred to the consolidated hardware test pass.
 
 ## Custom 8 MB Partition Layout and Flashing / Stored Data Policy
 

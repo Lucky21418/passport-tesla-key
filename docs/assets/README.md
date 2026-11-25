@@ -42,7 +42,7 @@ In alignment with the root [`README.md`](../../README.md#basic-edition-developme
 | **Consolidated device test & `P12` (power)** | Run one consolidated user device-test pass on the post-review merged image covering boot, screen rendering, three-button input, double-click feel, BLE, NVS storage across reboot, pairing UI, and sleep/wake; measure power consumption (`P12`) when metering equipment is available. |
 | **Post-test closeout (`P03`, `P17`) & retest rule** | Perform formal adjudication and delivery after the consolidated device test, covering former `P03` and `P17`. Only if must-fix defects surface during consolidated testing is a follow-up fix image built for retest, rather than testing repeatedly during development. |
 | **Dispatch & vehicle safety red lines** | Keep dispatch strictly one task item at a time. Never execute live-vehicle pairing or live-vehicle control. |
-| **Double-click mis-trigger status** | Independent analysis is still in progress and not yet jointly decided. Record and enforce "analyze first and decide jointly before modifying"; do not treat any unconfirmed timing change proposal as a settled decision. |
+| **Double-click mis-trigger status** | Jointly confirmed Option E (`PK_DOUBLE_MS = 300 ms`, `40 ms` clean `●` release at valid `>= 1900 mV` with `120 ms` cross-window / side-key / invalid-ADC hold preserved, `5 ms` `esp_timer` timestamped sampling with pre-deep-sleep teardown, and active-gesture preservation); on-device verification stays in the final consolidated device test pass. |
 
 ## Boundary
 

@@ -62,6 +62,7 @@ typedef struct {
     int locked;           /* ladder index or -1 */
     int candidate;
     bool pending;
+    bool candidate_clean_release; /* true only when candidate==-1 AND every sample in the streak had valid mv >= 1900 */
     pk_ms_t since_ms;
     bool time_set;
     pk_ms_t last_ms;
@@ -93,6 +94,36 @@ pk_err_t pk_btn_adapter_on_bsp_event(pk_btn_adapter_t *ad, pk_ms_t now,
 pk_err_t pk_btn_adapter_power_edge(pk_btn_adapter_t *ad, pk_ms_t now, pk_edge_t edge);
 
 pk_key_id_t pk_btn_ladder_key(int ladder_index);
+
+/* Pure 3-sample median filter for GPIO0 ADC readings; preserves invalid (-1)
+ * when fewer than 2 of 3 samples are valid so a failed ADC burst never turns
+ * into a 0 mV UP press or a synthetic valid release.
+ */
+int pk_btn_median3(int s0, int s1, int s2, bool *out_valid);
+
+#define PK_BTN_RING_CAP 64u
+
+typedef struct {
+    pk_ms_t ts_ms;
+    int16_t mv;
+    bool    valid;
+} pk_btn_sample_t;
+
+typedef struct {
+    pk_btn_sample_t buf[PK_BTN_RING_CAP];
+    uint8_t         head;
+    uint8_t         count;
+    int8_t          last_window;
+    bool            has_last_window;
+} pk_btn_sample_ring_t;
+
+void pk_btn_ring_init(pk_btn_sample_ring_t *ring);
+/* Push one timestamped sample; returns true when the decoded voltage window
+ * changed so an ISR / esp_timer producer knows when to wake the main task.
+ * Oldest sample is overwritten on overflow so recent edges are never lost.
+ */
+bool pk_btn_ring_push(pk_btn_sample_ring_t *ring, pk_ms_t ts_ms, int mv, bool valid);
+bool pk_btn_ring_pop(pk_btn_sample_ring_t *ring, pk_btn_sample_t *out);
 
 #ifdef __cplusplus
 }

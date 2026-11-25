@@ -6,9 +6,9 @@
 /*
  * Raw PRESS / RELEASE arbitration on a monotonic watermark.
  *
- * Contract (FoloToy BSP + shipped 1234/1149): 180 ms click/double window,
- * 500 ms long press. Short = act, double = back/status, long = high-consequence
- * action; long never means "back". A single click commits only at t > deadline;
+ * Contract: 300 ms click/double window, 500 ms long press.
+ * Short = act, double = back/status, long = high-consequence action;
+ * long never means "back". A single click commits only at t > deadline;
  * a second PRESS at t <= deadline is a double. tick(deadline) never commits.
  *
  * Adapters feed only PK_EDGE_PRESS / PK_EDGE_RELEASE. Cooked BSP single/double/
