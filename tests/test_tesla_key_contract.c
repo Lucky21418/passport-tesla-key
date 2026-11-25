@@ -3135,6 +3135,7 @@ static void test_double_click_option_e_regressions(void)
      * by +80 ms into a 500 ms long-press. */
     {
         setup_connected_main_for_keys(&app, &ad, &btn);
+        pk_app_vcsec_status(&app, false, PK_LOCK_READ_UNLOCKED);
         feed_adc_span(&app, &btn, 1100u, 1530u, 303, true);  /* 430 ms physical hold */
         feed_adc_span(&app, &btn, 1530u, 2000u, 2950, true); /* release + >300 ms */
         expect(app.page == PK_PAGE_MAIN && g_cap_writes == 1 &&
@@ -3284,21 +3285,43 @@ static void test_command_observation_decoupling(void)
            "decouple: FAULT_BUSY ends txn but preserves known VCSEC lock state");
 
     intent = pk_app_make_intent(&app, PK_ACTION_UNLOCK);
+    expect(pk_app_commit(&app, &intent, 1150u), "decouple: UNLOCK commits before priv fault");
+    pk_app_protocol_fault_ex(&app, PK_PROTO_FAULT_INSUFFICIENT_PRIVILEGES, true, true);
+    expect(!app.has_pending && app.vcsec_status_valid &&
+           app.vcsec_lock_state == PK_LOCK_READ_LOCKED,
+           "decouple: INSUFFICIENT_PRIVILEGES preserves known VCSEC lock state");
+
+    intent = pk_app_make_intent(&app, PK_ACTION_UNLOCK);
+    expect(pk_app_commit(&app, &intent, 1180u), "decouple: UNLOCK commits before unauth busy");
+    pk_app_protocol_fault_ex(&app, PK_PROTO_FAULT_BUSY, true, false);
+    expect(!app.has_pending && app.vcsec_status_valid &&
+           app.vcsec_lock_state == PK_LOCK_READ_LOCKED,
+           "decouple: unauthenticated non-resync outer fault preserves known VCSEC lock state");
+
+    intent = pk_app_make_intent(&app, PK_ACTION_UNLOCK);
     expect(pk_app_commit(&app, &intent, 1200u), "decouple: UNLOCK commits before counter fault");
     pk_app_protocol_fault_ex(&app, PK_PROTO_FAULT_INVALID_COUNTER, true, true);
-    expect(!app.vcsec_status_valid && app.vcsec_lock_state == PK_LOCK_READ_UNKNOWN,
-           "decouple: INVALID_COUNTER invalidates VCSEC lock state for resync");
+    expect(!app.vcsec_status_valid && app.vcsec_lock_state == PK_LOCK_READ_UNKNOWN &&
+           pk_app_primary(&app) == PK_ACTION_VCSEC_GET_STATUS_ONCE,
+           "decouple: INVALID_COUNTER invalidates lock state and primary is read-only query, not LOCK");
 
-    /* 2. Symmetric UNLOCK timeout: clears stale LOCKED so primary never loops
-     * sending UNLOCK forever. */
+    /* 2. Symmetric UNLOCK timeout: starts PK_PENDING_UNLOCK_VERIFY (read-only
+     * VCSEC_GET_STATUS_ONCE) while connected; if verify also times out, clears
+     * stale LOCKED snapshot and reports PK_MSG_CMD_UNCONFIRMED. */
     setup_connected_main_for_keys(&app, &ad, &btn);
     pk_app_vcsec_status(&app, false, PK_LOCK_READ_LOCKED);
     intent = pk_app_make_intent(&app, PK_ACTION_UNLOCK);
     expect(pk_app_commit(&app, &intent, 1100u), "decouple: UNLOCK commits for timeout test");
     pk_app_tick(&app, 1100u + PK_COMMAND_WAIT_MS + 10u);
+    expect(app.has_pending && app.pending.kind == PK_PENDING_UNLOCK_VERIFY &&
+           app.pending.action == PK_ACTION_VCSEC_GET_STATUS_ONCE,
+           "decouple: UNLOCK timeout symmetrically starts read-only unlock verify");
+    pk_app_tick(&app, 1100u + PK_COMMAND_WAIT_MS + 10u + PK_LOCK_VERIFY_MS + 10u);
     expect(!app.has_pending && !app.vcsec_status_valid &&
-           app.vcsec_lock_state == PK_LOCK_READ_UNKNOWN,
-           "decouple: UNLOCK timeout clears stale LOCKED snapshot symmetrically");
+           app.vcsec_lock_state == PK_LOCK_READ_UNKNOWN &&
+           app.message == PK_MSG_CMD_UNCONFIRMED &&
+           pk_app_primary(&app) == PK_ACTION_VCSEC_GET_STATUS_ONCE,
+           "decouple: UNLOCK verify timeout clears stale LOCKED and primary is not LOCK");
 
     /* 3. Comfort toggles: refuse UNKNOWN, and ACCEPTED never optimistically
      * flips caps without a vehicle observation. */

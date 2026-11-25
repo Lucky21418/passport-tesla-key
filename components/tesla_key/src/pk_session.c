@@ -32,6 +32,8 @@ void pk_session_set_conn_gen(pk_session_ctx_t *ctx, uint32_t conn_gen)
     memset(ctx->signed_request, 0, sizeof(ctx->signed_request));
     pk_proto_rx_window_init(&ctx->rx_window[0]);
     pk_proto_rx_window_init(&ctx->rx_window[1]);
+    memset(ctx->req_ids, 0, sizeof(ctx->req_ids));
+    memset(ctx->req_id_next, 0, sizeof(ctx->req_id_next));
 }
 
 void pk_session_note_handshake_ex(pk_session_ctx_t *ctx, int slot, uint32_t conn_gen,
@@ -219,6 +221,8 @@ bool pk_session_apply(pk_session_ctx_t *ctx, const pk_session_apply_t *in,
      * responses from the prior epoch cannot complete a new transaction. */
     if (sess->epoch_gen != prev_epoch_gen) {
         pk_proto_rx_window_init(&ctx->rx_window[idx]);
+        memset(ctx->req_ids[idx], 0, sizeof(ctx->req_ids[idx]));
+        ctx->req_id_next[idx] = 0u;
     }
     if (prev_epoch_gen != 0u && sess->epoch_gen != prev_epoch_gen) {
         ctx->request[idx].valid = false;
@@ -324,6 +328,22 @@ pk_proto_rx_window_t *pk_session_rx_window(pk_session_ctx_t *ctx, pk_proto_domai
     return &ctx->rx_window[idx];
 }
 
+void pk_session_note_req_id(pk_session_ctx_t *ctx, int slot, uint32_t conn_gen,
+                            pk_proto_domain_t domain, const uint8_t req_id[17])
+{
+    int idx;
+    uint8_t pos;
+
+    if (!ctx || !req_id || conn_gen != ctx->conn_gen || (idx = session_index(domain)) < 0) {
+        return;
+    }
+    pos = (uint8_t)(ctx->req_id_next[idx] % PK_SESSION_REQ_ID_CAP);
+    ctx->req_ids[idx][pos].valid = true;
+    ctx->req_ids[idx][pos].slot = slot;
+    memcpy(ctx->req_ids[idx][pos].req_id, req_id, 17u);
+    ctx->req_id_next[idx] = (uint8_t)((pos + 1u) % PK_SESSION_REQ_ID_CAP);
+}
+
 bool pk_session_accept_observation_rx(pk_session_ctx_t *ctx,
                                       const pk_session_obs_in_t *in,
                                       uint8_t *plain_out, size_t plain_cap,
@@ -333,6 +353,7 @@ bool pk_session_accept_observation_rx(pk_session_ctx_t *ctx,
     int idx;
     pk_proto_decrypt_t dec;
     size_t dec_len = 0u;
+    bool decrypted = false;
 
     if (evidence_out) {
         *evidence_out = PK_EVIDENCE_UNKNOWN;
@@ -358,8 +379,26 @@ bool pk_session_accept_observation_rx(pk_session_ctx_t *ctx,
     }
     dec.sess = in->sess;
     dec.vin = in->vin;
-    dec.req_id = NULL;
-    if (!pk_proto_decrypt_routable_payload(in->rmsg, &dec, plain_out, plain_cap, &dec_len)) {
+    if (in->req_id) {
+        dec.req_id = in->req_id;
+        decrypted = pk_proto_decrypt_routable_payload(in->rmsg, &dec, plain_out, plain_cap, &dec_len);
+    } else {
+        uint8_t step;
+        for (step = 0u; step < PK_SESSION_REQ_ID_CAP; ++step) {
+            uint8_t pos = (uint8_t)((ctx->req_id_next[idx] + PK_SESSION_REQ_ID_CAP - 1u - step) %
+                                    PK_SESSION_REQ_ID_CAP);
+            const pk_session_req_id_t *rid = &ctx->req_ids[idx][pos];
+            if (!rid->valid || rid->slot != in->slot) {
+                continue;
+            }
+            dec.req_id = rid->req_id;
+            if (pk_proto_decrypt_routable_payload(in->rmsg, &dec, plain_out, plain_cap, &dec_len)) {
+                decrypted = true;
+                break;
+            }
+        }
+    }
+    if (!decrypted) {
         pk_proto_zeroize(plain_out, plain_cap);
         return false;
     }

@@ -1243,7 +1243,7 @@ int main(void)
         setup_connected_slot0(247u, false); /* unsigned probe path */
         bool unlock_before = pk_app_can_vcsec_unlock(&g_app);
         pk_action_t primary_before = pk_app_primary(&g_app);
-        check(!g_app.caps.adapter_verified && primary_before == PK_ACTION_LOCK,
+        check(!g_app.caps.adapter_verified && primary_before == PK_ACTION_VCSEC_GET_STATUS_ONCE,
               "L1", "connect alone does not verify the adapter or select UNLOCK");
         pk_ble_frame_t probe = {
             .domain = PK_DOMAIN_VCSEC,
@@ -1268,7 +1268,7 @@ int main(void)
               !g_app.vcsec_status_valid && !g_app.caps.adapter_verified &&
               pk_app_can_vcsec_unlock(&g_app) == unlock_before &&
               pk_app_primary(&g_app) == primary_before &&
-              pk_app_primary(&g_app) == PK_ACTION_LOCK,
+              pk_app_primary(&g_app) == PK_ACTION_VCSEC_GET_STATUS_ONCE,
               "L1", "Legacy VCSEC status updates display observation ONLY and does not change authorization");
 
         /* L2: Legacy VCSEC VehicleStatus(LOCKED) during PK_PENDING_LOCK_VERIFY NEVER confirms lock */
@@ -1389,6 +1389,63 @@ int main(void)
     port_ble_start_candidate_pairing(&g_app, "5YJ3E1EA1PF000001");
     check(g_app.message == PK_MSG_AP_EXPIRED && !g_app.has_vin,
           "N12", "closed hotspot does not invent a VIN");
+
+    /* N14: Real AES-GCM passive VCSEC observation after wire txn is released
+     * updates reported state via domain-session req_id ring; replay rejected;
+     * background reconcile probe (txn_id==0) survives radio_cancel(0). */
+    {
+        uint8_t plain[64], wire[256];
+        size_t plen, wlen;
+        VCSEC_FromVCSECMessage vm;
+        pb_ostream_t os;
+        pk_proto_key_slot_t *ks;
+
+        setup_connected_slot0(247u, true);
+        ks = port_slot_keys(0);
+        /* Record a signed req_id on VCSEC domain session, then release wire txn */
+        pk_session_note_req_id(&s_session, 0, s_session.conn_gen,
+                               PK_PROTO_DOMAIN_VEHICLE_SECURITY, s_wire_txns[0].req_id);
+        s_wire_txns[0].active = false;
+        g_app.vcsec_status_valid = false;
+        g_app.vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
+
+        memset(&vm, 0, sizeof(vm));
+        vm.which_sub_message = VCSEC_FromVCSECMessage_vehicleStatus_tag;
+        vm.sub_message.vehicleStatus.vehicleLockState = VCSEC_VehicleLockState_E_VEHICLELOCKSTATE_UNLOCKED;
+        vm.sub_message.vehicleStatus.vehicleSleepStatus = VCSEC_VehicleSleepStatus_E_VEHICLE_SLEEP_STATUS_AWAKE;
+        os = pb_ostream_from_buffer(plain, sizeof(plain));
+        pb_encode(&os, VCSEC_FromVCSECMessage_fields, &vm);
+        plen = os.bytes_written;
+
+        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                   s_wire_txns[0].routing_addr, s_wire_txns[0].uuid,
+                                   plain, plen, &ks->vcsec, s_wire_txns[0].req_id,
+                                   true, 55u, false, 0);
+        inject_rx_wire(wire, wlen);
+        check(g_app.vcsec_status_valid && g_app.vcsec_lock_state == PK_LOCK_READ_UNLOCKED,
+              "N14", "real AES-GCM passive VCSEC observation updates reported state after txn release");
+
+        /* Replay of same counter 55 with different lock state MUST be rejected */
+        vm.sub_message.vehicleStatus.vehicleLockState = VCSEC_VehicleLockState_E_VEHICLELOCKSTATE_LOCKED;
+        os = pb_ostream_from_buffer(plain, sizeof(plain));
+        pb_encode(&os, VCSEC_FromVCSECMessage_fields, &vm);
+        plen = os.bytes_written;
+        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                   s_wire_txns[0].routing_addr, s_wire_txns[0].uuid,
+                                   plain, plen, &ks->vcsec, s_wire_txns[0].req_id,
+                                   true, 55u, false, 0);
+        inject_rx_wire(wire, wlen);
+        check(g_app.vcsec_lock_state == PK_LOCK_READ_UNLOCKED,
+              "N14", "session rx_window rejects replayed passive observation counter");
+
+        /* Background reconcile probe (txn_id==0) is not canceled by radio_cancel(0) */
+        s_wire_txns[0].active = true;
+        s_wire_txns[0].txn_id = 0u;
+        s_wire_txns[0].action = PK_ACTION_VCSEC_GET_STATUS_ONCE;
+        radio_cancel(NULL, 0u);
+        check(s_wire_txns[0].active,
+              "N14", "radio_cancel(0) preserves active background VCSEC reconcile probe");
+    }
 
     printf("\nSUMMARY: %d PASS, %d FAIL (total %d)\n", g_pass, g_fail, g_pass + g_fail);
     return (g_fail == 0) ? 0 : 1;

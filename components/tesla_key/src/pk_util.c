@@ -211,16 +211,17 @@ pk_action_t pk_app_primary(const pk_app_t *app)
     if (!app || app->vehicle == PK_VEHICLE_NONE) {
         return PK_ACTION_NO_TARGET;
     }
-    /* Unknown lock stays LOCK. Sleep alone does not select UNLOCK.
-     * A fresh authenticated VCSEC lock snapshot may select UNLOCK when the
-     * car is not a known motion tendency. */
     if (pk_app_known_motion(app)) {
         return PK_ACTION_LOCK;
     }
-    if (app->vcsec_status_valid &&
-        (app->vcsec_lock_state == PK_LOCK_READ_LOCKED ||
-         app->vcsec_lock_state == PK_LOCK_READ_INTERNAL_LOCKED ||
-         app->vcsec_lock_state == PK_LOCK_READ_SELECTIVE_UNLOCKED)) {
+    /* Unknown or unconfirmed lock state MUST NOT default to LOCK: return
+     * read-only VCSEC status query so pressing ● reconciles real state. */
+    if (!app->vcsec_status_valid || app->vcsec_lock_state == PK_LOCK_READ_UNKNOWN) {
+        return PK_ACTION_VCSEC_GET_STATUS_ONCE;
+    }
+    if (app->vcsec_lock_state == PK_LOCK_READ_LOCKED ||
+        app->vcsec_lock_state == PK_LOCK_READ_INTERNAL_LOCKED ||
+        app->vcsec_lock_state == PK_LOCK_READ_SELECTIVE_UNLOCKED) {
         return PK_ACTION_UNLOCK;
     }
     return PK_ACTION_LOCK;

@@ -1,4 +1,5 @@
 #include "pk_app_internal.h"
+#include "pk_plan.h"
 #include "pk_power.h"
 
 #include <string.h>
@@ -44,6 +45,35 @@ static void expire_pending(pk_app_t *app)
             }
             pk_app_set_msg(app, (outcome == PK_TX_NOT_SENT) ? PK_MSG_CANCELLED
                                                             : PK_MSG_LOCK_UNCONFIRMED);
+        }
+        return;
+    }
+    if (app->pending.action == PK_ACTION_UNLOCK && app->connected &&
+        app->vehicle != PK_VEHICLE_NONE) {
+        pk_ble_release_in_flight(app);
+        app->serial++;
+        memset(&app->pending, 0, sizeof(app->pending));
+        app->pending.kind = PK_PENDING_UNLOCK_VERIFY;
+        app->pending.action = PK_ACTION_VCSEC_GET_STATUS_ONCE;
+        app->pending.id = app->serial;
+        app->pending.scope = pk_app_scope(app);
+        app->pending.deadline = app->now + pk_plan_deadline(PK_PLAN_UNLOCK_VERIFY);
+        app->intent_deadline = 0;
+        app->has_pending = true;
+        {
+            pk_err_t rc = pk_ble_send_once(app, PK_DOMAIN_VCSEC,
+                                           PK_ACTION_VCSEC_GET_STATUS_ONCE,
+                                           app->pending.deadline);
+            if (rc != PK_OK) {
+                pk_ble_release_in_flight(app);
+                app->has_pending = false;
+                pk_app_set_busy(app, false);
+                app->vcsec_status_valid = false;
+                app->vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
+                app->vcsec_reconcile_attempts = 0u;
+                app->vcsec_reconcile_next_ms = 0u;
+                pk_app_set_msg(app, PK_MSG_CMD_UNCONFIRMED);
+            }
         }
         return;
     }

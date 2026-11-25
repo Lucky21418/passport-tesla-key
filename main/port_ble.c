@@ -992,6 +992,7 @@ static pk_err_t radio_write_once(void *ctx, const pk_ble_frame_t *frame)
             pk_session_note_request_ex(&s_session, txn->slot, conn_gen, txn->epoch_gen,
                                        pdom, txn->routing_addr, txn->uuid,
                                        true, port_now_ms());
+            pk_session_note_req_id(&s_session, txn->slot, conn_gen, pdom, txn->req_id);
         }
         if (wire_len == 0) {
             pk_session_drop(&s_session, pdom, sess);
@@ -1036,7 +1037,13 @@ static pk_err_t radio_cancel(void *ctx, pk_id_t txn_id)
 {
     (void)ctx;
     for (size_t i = 0; i < 2; ++i) {
-        if (txn_id == 0 || s_wire_txns[i].txn_id == txn_id) {
+        if (txn_id == 0) {
+            if (s_wire_txns[i].action == PK_ACTION_VCSEC_GET_STATUS_ONCE &&
+                s_wire_txns[i].txn_id == 0u) {
+                continue;
+            }
+            s_wire_txns[i].active = false;
+        } else if (s_wire_txns[i].txn_id == txn_id) {
             s_wire_txns[i].active = false;
         }
     }
@@ -1581,6 +1588,7 @@ static void flush_waiting_session_txn(pk_app_t *app, const pk_proto_key_slot_t *
         pk_session_note_request_ex(&s_session, txn->slot, conn_gen, txn->epoch_gen,
                                    from_domain, txn->routing_addr, txn->uuid,
                                    true, port_now_ms());
+        pk_session_note_req_id(&s_session, txn->slot, conn_gen, from_domain, txn->req_id);
     }
     if (wlen == 0) {
         pk_id_t tid = txn->txn_id;
@@ -1638,7 +1646,7 @@ static void start_background_status_probe(pk_app_t *app, int slot, uint32_t conn
     txn = wire_txn_for_domain(PK_PROTO_DOMAIN_VEHICLE_SECURITY);
     memset(txn, 0, sizeof(*txn));
     txn->active = true;
-    txn->txn_id = app->serial;
+    txn->txn_id = 0u;
     txn->action = PK_ACTION_VCSEC_GET_STATUS_ONCE;
     txn->domain = PK_PROTO_DOMAIN_VEHICLE_SECURITY;
     txn->slot = slot;
@@ -1671,6 +1679,8 @@ static void start_background_status_probe(pk_app_t *app, int slot, uint32_t conn
         pk_session_note_request_ex(&s_session, txn->slot, conn_gen, txn->epoch_gen,
                                    PK_PROTO_DOMAIN_VEHICLE_SECURITY,
                                    txn->routing_addr, txn->uuid, true, port_now_ms());
+        pk_session_note_req_id(&s_session, txn->slot, conn_gen,
+                               PK_PROTO_DOMAIN_VEHICLE_SECURITY, txn->req_id);
     }
     if (wlen == 0 || gatt_write_framed(wire, wlen, txn->deadline) != PK_TX_DELIVERED) {
         pk_session_drop(&s_session, PK_PROTO_DOMAIN_VEHICLE_SECURITY, &ks->vcsec);
@@ -1821,7 +1831,7 @@ static void handle_rx_frame(pk_app_t *app, int slot, uint32_t conn_gen,
                     .txn_routing_addr = ftxn->routing_addr,
                     .txn_uuid         = ftxn->uuid,
                     .txn_req_id       = ftxn->req_id,
-                    .rx_window        = &ftxn->rx_window,
+                    .rx_window        = pk_session_rx_window(&s_session, dom),
                 };
                 pk_evidence_t chk_ev = PK_EVIDENCE_UNKNOWN;
                 size_t chk_len = 0;
@@ -1903,7 +1913,8 @@ static void handle_rx_frame(pk_app_t *app, int slot, uint32_t conn_gen,
                 .sess     = sess,
                 .rmsg     = &rmsg,
             };
-            if (!pk_session_accept_observation_rx(&s_session, &obs_in,
+            if (slot != app->vehicle || slot == PK_VEHICLE_NONE ||
+                !pk_session_accept_observation_rx(&s_session, &obs_in,
                                                   s_rx_plain, sizeof(s_rx_plain),
                                                   &plain_len, &evidence) ||
                 plain_len == 0) {
@@ -1913,11 +1924,7 @@ static void handle_rx_frame(pk_app_t *app, int slot, uint32_t conn_gen,
                 pk_proto_vcsec_resp_t vresp;
                 if (pk_proto_parse_vcsec_response(s_rx_plain, plain_len, &vresp) &&
                     vresp.has_vehicle_status) {
-                    app->vcsec_status_valid = true;
-                    app->vcsec_reconcile_attempts = 0u;
-                    app->vcsec_reconcile_next_ms = 0u;
-                    app->vcsec_asleep = (vresp.sleep_status == 2);
-                    app->vcsec_lock_state = vresp.lock_state;
+                    pk_app_vcsec_status(app, vresp.sleep_status == 2, vresp.lock_state);
                 }
             } else if (rmsg.from_domain == PK_PROTO_DOMAIN_INFOTAINMENT) {
                 pk_proto_carserver_resp_t cresp;

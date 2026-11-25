@@ -32,12 +32,22 @@ typedef struct {
     pk_ms_t  at_ms;
 } pk_session_ref_t;
 
+#define PK_SESSION_REQ_ID_CAP    4
+
+typedef struct {
+    bool    valid;
+    int     slot;
+    uint8_t req_id[17];
+} pk_session_req_id_t;
+
 typedef struct {
     uint32_t             conn_gen;
     pk_session_ref_t     handshake[PK_SESSION_DOMAIN_COUNT];
     pk_session_ref_t     request[PK_SESSION_DOMAIN_COUNT];        /* last request, any */
     pk_session_ref_t     signed_request[PK_SESSION_DOMAIN_COUNT]; /* last signed request */
     pk_proto_rx_window_t rx_window[PK_SESSION_DOMAIN_COUNT];      /* session anti-replay (conn_gen + epoch_gen) */
+    pk_session_req_id_t  req_ids[PK_SESSION_DOMAIN_COUNT][PK_SESSION_REQ_ID_CAP];
+    uint8_t              req_id_next[PK_SESSION_DOMAIN_COUNT];
 } pk_session_ctx_t;
 
 typedef struct {
@@ -121,6 +131,11 @@ bool pk_session_accept_rx(const pk_session_ctx_t *ctx,
 /* Return the domain session anti-replay window (reset on conn_gen / epoch_gen). */
 pk_proto_rx_window_t *pk_session_rx_window(pk_session_ctx_t *ctx, pk_proto_domain_t domain);
 
+/* Record a signed request's 17-byte req_id on the domain session so passive
+ * AEAD observations can verify AAD even after the short-lived wire txn ends. */
+void pk_session_note_req_id(pk_session_ctx_t *ctx, int slot, uint32_t conn_gen,
+                            pk_proto_domain_t domain, const uint8_t req_id[17]);
+
 typedef struct {
     int                        slot;
     uint32_t                   conn_gen;
@@ -128,6 +143,7 @@ typedef struct {
     const char                *vin;
     const pk_proto_session_t  *sess;
     const pk_proto_routable_t *rmsg;
+    const uint8_t             *req_id; /* optional explicit [17]; NULL uses domain session req_id ring */
 } pk_session_obs_in_t;
 
 /* Passive authenticated state-observation RX track:

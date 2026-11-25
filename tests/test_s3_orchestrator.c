@@ -421,7 +421,7 @@ static void test_driving_matrix(void)
     expect(pk_app_primary(&app) == PK_ACTION_UNLOCK, "D07: locked and not moving may show UNLOCK");
     app.vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
     app.vcsec_asleep = true;
-    expect(pk_app_primary(&app) == PK_ACTION_LOCK, "D07: asleep alone does not select UNLOCK");
+    expect(pk_app_primary(&app) == PK_ACTION_VCSEC_GET_STATUS_ONCE, "D07: asleep alone does not select UNLOCK");
     intent = pk_app_make_intent(&app, PK_ACTION_UNLOCK);
     expect(pk_app_commit(&app, &intent, app.now) && !pk_app_parked(&app),
            "D07: motion unknown allows unlock and is not park proof");

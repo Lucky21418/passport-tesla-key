@@ -372,11 +372,10 @@ void pk_app_protocol_fault_ex(pk_app_t *app, int fault, bool from_vcsec, bool au
     app->lock_fsm = PK_LOCK_FSM_IDLE;
     app->result_auto_return = false;
     if (from_vcsec &&
-        (!authenticated || pk_proto_fault_needs_resync(fault) ||
-         pk_proto_fault_is_key_error(fault) ||
-         fault == PK_PROTO_FAULT_INSUFFICIENT_PRIVILEGES)) {
-        /* Session/auth/key/epoch trust broke: do not keep a stale lock
-         * snapshot. Transient BUSY/TIMEOUT/INTERNAL preserve known state. */
+        (pk_proto_fault_needs_resync(fault) || pk_proto_fault_is_key_error(fault))) {
+        /* Only session/key/counter/epoch desync faults invalidate known lock
+         * state. BUSY, TIMEOUT, INSUFFICIENT_PRIVILEGES, and non-resync outer
+         * faults preserve known reported state. */
         app->vcsec_status_valid = false;
         app->vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
         app->vcsec_asleep = false;
