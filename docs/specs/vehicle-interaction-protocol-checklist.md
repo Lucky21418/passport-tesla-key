@@ -1,24 +1,26 @@
+**English** · [简体中文](vehicle-interaction-protocol-checklist.zh_CN.md)
+
 # Vehicle-interaction protocol checklist
 
-裁决版：2026-11-25 23:00 CST（Asia/Shanghai）。由总管把官方云端核实清单与仅发给总管的数份三方研究报告合并，并把不采信的三方结论一并列入，便于后续查找，避免重复论证。
+Adjudicated edition: 2026-11-25 23:00 CST (Asia/Shanghai). The coordinator merged the official cloud verification checklist with several third-party research reports that were sent only to the coordinator, and also listed the third-party conclusions that were not accepted, so later lookups can find them and the same arguments are not repeated.
 
-增补：2026-11-25 23:30 CST。收入用户再交的 Word《车机交互规范只读核实清单（对照立项五个参考仓库）》。官方 Part 1 / Part 2 仍不改写；新增条目写入材料来源与 Part 3。本轮三项修复不扩大。
+Supplement: 2026-11-25 23:30 CST. Incorporated the Word document the user submitted again, *Read-only verification checklist for the vehicle-interaction specification (against the five reference repositories named at project start)*. Official Part 1 / Part 2 are still not rewritten. New items are written into Sources and Part 3. This round's three-item fix is not expanded.
 
-再裁决：2026-11-25 23:50 CST。总管按全部研究材料，并亲自对照 `teslamotors/vehicle-command` @ `0a582da430c4aca6d397fb6cbed5b4d6bb380125`（兼核更早的 `a4b43c1`）原文重判，不默认第一次官方云审计必然正确。会话、计数器、按请求窗口、显式唤醒、无回包不得当失败、省略锁态不得显示未闭锁，这些核心结论经原文复核仍然成立。第一次云审计漏记了官方客户端在订阅后 `ExchangeMTU`（失败回退默认 ATT）；Word 报告「官方不交换 MTU」以及把 `session.go:43-53` 当成窗口实现，均与该活对象不符。五点 README 约束不改。本轮三项修复不扩大。
+Re-adjudication: 2026-11-25 23:50 CST. The coordinator re-judged from all the research materials and personally re-read the original text of `teslamotors/vehicle-command` @ `0a582da430c4aca6d397fb6cbed5b4d6bb380125` (also checking the earlier `a4b43c1`). The first official cloud audit is not assumed to be correct by default. Session, counters, per-request window, explicit wake, a missing reply must not be treated as failure, and an omitted lock state must not be shown as unlocked: these core conclusions still hold after the original text was re-checked. The first cloud audit missed that the official client calls `ExchangeMTU` after subscribe (on failure, fall back to the default ATT). The Word report's claim that "official does not exchange MTU," and its treatment of `session.go:43-53` as the window implementation, do not match that live object. The five README constraints are not changed. This round's three-item fix is not expanded.
 
-计划按 P 更新：2026-11-25 23:55 CST。将文末「后续研究计划」按基础版 P00–P17 重新编排。开发原则不改。本轮三项修复不扩大，不刷机。
+Plan reordered by P: 2026-11-25 23:55 CST. The "follow-up research plan" at the end of the document is rearranged onto baseline P00-P17. Development principles are not changed. This round's three-item fix is not expanded, and the device is not flashed.
 
-集中测试原则：2026-11-25 23:58 CST。按用户硬令改写计划：拒绝更新一次就测试一次；刷机前把能做的代码与独审都做完，只在授权后集中刷机、集中测试。当前进行中的三项修复仍不中途扩大，但其后不依赖实车的协议对齐改到刷机前，一次一件做完。
+Concentrated-testing principle: 2026-11-25 23:58 CST. The plan is rewritten under a hard user order: refuse testing once per update. Before any flash, finish the code and the unique reviews that can be done without the car, and flash and test only after authorization, both in one concentrated pass. The three fixes now in progress are still not expanded mid-course. Protocol alignment that does not depend on a real vehicle is moved to before the flash, one item at a time, each finished completely.
 
-权威顺序：以 `teslamotors/vehicle-command` @ `0a582da430c4aca6d397fb6cbed5b4d6bb380125` 的 `protocol.md` 与官方源码为第一权威。官方云端清单（[bc-d7db7c3b](https://cursor.com/agents/bc-d7db7c3b-b1b8-52a7-b6cc-5471aee508be)）是一次有依据的核实，不是不可订正的终审；与官方原文冲突时，以原文为准，并在本文件记下订正。三方研究报告是参考与已踩坑记录，冲突以官方原文为准。本文件不替代对具体提交的官方代码独审。
+Authority order: `protocol.md` and the official source of `teslamotors/vehicle-command` @ `0a582da430c4aca6d397fb6cbed5b4d6bb380125` are the first authority. The official cloud checklist ([bc-d7db7c3b](https://cursor.com/agents/bc-d7db7c3b-b1b8-52a7-b6cc-5471aee508be)) is one evidenced verification, not an uncorrectable final review. Where it conflicts with the official original text, the original text wins, and the correction is recorded in this file. Third-party research reports are references and records of pitfalls already hit. Conflicts are resolved by the official original text. This file does not replace an official code unique review of a specific commit.
 
-产品对照节点：`Lucky21418/passport-tesla-key` 候选分支 `cand/d08-dead-code-cleanup` @ `1377473a0170fde55a3eacba6068ef5767adc9d2`。`main`（`e85197d56abe92c35a1cfb84fad85fba2545c9cc`）与 `feature/tesla-key`（`47fd967aaa22d619fce3ffa15a3e97d5bd4ccac2`）未被移动。设备仍为已授权且独审通过的 `a3a5305`。本文件不授权刷机。
+Product comparison node: `Lucky21418/passport-tesla-key` candidate branch `cand/d08-dead-code-cleanup` @ `1377473a0170fde55a3eacba6068ef5767adc9d2`. `main` (`e85197d56abe92c35a1cfb84fad85fba2545c9cc`) and `feature/tesla-key` (`47fd967aaa22d619fce3ffa15a3e97d5bd4ccac2`) were not moved. The device remains the authorized and uniquely reviewed `a3a5305`. This file does not authorize flashing.
 
-官方云端清单原文写于共识文档提交之前，当时仓库未被该次云端任务改动。其后候选分支已有文档提交 `4b1bd25643cec7eb4e92fc7e071821c75fd33a71`（仅 `README.md` / `README.zh_CN.md`），写入五点可执行约束。下方「Consensus-doc gap」已按此更正。按本清单对 `1377473` 的官方复审为 [bc-d18ff0ed](https://cursor.com/agents/bc-d18ff0ed-5706-54e9-8317-e91b47fc82dc)，结论 FAIL：超时清掉已知锁态、打开状态页隐式唤醒；省略 `vehicleLockState` 仍可能显示未闭锁，属残留。当前修复仍是这三项，不扩大。
+The original official cloud checklist was written before the consensus document was committed, and that cloud task did not change the repository. The candidate branch later received documentation commit `4b1bd25643cec7eb4e92fc7e071821c75fd33a71` (`README.md` / `README.zh_CN.md` only), which wrote the five executable constraints. The "Consensus-doc gap" below has been corrected for that. The official re-review of `1377473` against this checklist is [bc-d18ff0ed](https://cursor.com/agents/bc-d18ff0ed-5706-54e9-8317-e91b47fc82dc). Conclusion FAIL: a timeout clears a known lock state, and opening the status page implicitly wakes; an omitted `vehicleLockState` can still be shown as unlocked, which is residual. The current fix is still these three items and is not expanded.
 
-下方 Part 1、Part 2、Conflicts、Class C、Application-layer schema 与两份官方摘要，保留云端清单原文（英文），只更正随后已被事实改写的文档缺口。新增的「材料来源」「本轮产品差距」「Part 3 三方研究报告裁决（含不采信）」由总管撰写。
+Part 1, Part 2, Conflicts, Class C, Application-layer schema, and the two official summaries below keep the original cloud-checklist text (English). Only document gaps that later facts rewrote are corrected. The new "Sources," "Product gap for this round," and "Part 3 adjudication of third-party research reports (including what is not accepted)" were written by the coordinator.
 
-官方清单当时未连接实车。「What it does on a real car」指由所引协议原文与所引客户端代码推出的后果，不是新的实车抓包。
+The official checklist was not connected to a real vehicle at the time. "What it does on a real car" means the consequence inferred from the cited protocol text and the cited client code, not a new capture from a real vehicle.
 
 ## Sources re-read
 
@@ -39,11 +41,11 @@ Classes:
 
 ## Consensus-doc status (updated 2026-11-25 23:00 CST)
 
-官方云端清单写成时，共识文档尚未写入会话/防重放/唤醒约束。其后 `4b1bd25643cec7eb4e92fc7e071821c75fd33a71` 仅修改根目录 `README.md` 与 `README.zh_CN.md`（各 +11 行），写入五点可执行约束：响应窗口按同一条请求且首包含 counter 0 须接受；官方窗口宽度 32；VCSEC 同时只发一条且无回包不得自动补发；唤醒必须显式，不得为读状态隐式唤醒；proto3 省略的 `vehicleLockState` 不得显示未闭锁。并写明五份仓库角色与 C 类定时器不是官方规范。
+When the official cloud checklist was written, the consensus document had not yet recorded the session, anti-replay, and wake constraints. Later, `4b1bd25643cec7eb4e92fc7e071821c75fd33a71` changed only the root `README.md` and `README.zh_CN.md` (+11 lines each) and wrote five executable constraints: the response window is per the same request, and a first packet whose counter is 0 must be accepted; the official window width is 32; VCSEC sends only one request at a time, and a missing reply must not be automatically resent; wake must be explicit and must not implicitly wake in order to read status; an omitted proto3 `vehicleLockState` must not be shown as unlocked. It also states the roles of the five repositories, and that Class C timers are not official specification.
 
-该提交不是本完整清单的替代件。`docs/assets/README.md` 仍主要把 `vehicle-command` @ `0a582da430c4aca6d397fb6cbed5b4d6bb380125` 作为 protobuf schema 出处。`PK_WAKE_SETTLE_MS`（7000）仍是产品源码中的本地停顿（C7），注释已说明它不是安全 TTL。`FoloToy/ai-passport` 在所核 SHA 上没有 `tesla` / `VCSEC` / `vehicle-command` 匹配，不贡献车机交互规则（A0）。
+That commit is not a substitute for this complete checklist. `docs/assets/README.md` still mainly cites `vehicle-command` @ `0a582da430c4aca6d397fb6cbed5b4d6bb380125` as the protobuf schema source. `PK_WAKE_SETTLE_MS` (7000) is still a local pause in the product source (C7). The comment already says it is not a safety TTL. `FoloToy/ai-passport` at the checked SHA has no `tesla` / `VCSEC` / `vehicle-command` matches and contributes no vehicle-interaction rules (A0).
 
-完整目录以本文件为准。不采信的三方结论见 Part 3，不要再写回 README 当官方要求。
+The complete catalog is this file. Third-party conclusions that were not accepted are in Part 3. Do not write them back into the README as official requirements.
 
 ---
 
@@ -378,7 +380,7 @@ SDK: same UUIDs and `VehicleLocalName` (`ble.go`, lines 33–36, 133–137). `Se
 
 Passport: write-with-response, 2-byte big-endian length, drop a partial frame after 1 s, reject a declared length above 1024. After CCCD subscribe, follow A22a for MTU.
 
-### A22a. Official client ATT MTU exchange（总管 2026-11-25 复核补记）
+### A22a. Official client ATT MTU exchange (coordinator re-check addendum, 2026-11-25)
 
 Rule / SDK behavior: after a successful Subscribe on the RX characteristic, the official BLE client calls `client.ExchangeMTU(maxBLEMTUSize)` (`pkg/connector/ble/ble.go`, lines 349–357). On failure it logs a warning and sets `blockLength = ble.DefaultMTU - 3`. On success, `blockLength = min(txMtu, maxBLEMessageSize) - 3`. The RoutableMessage cap remains 1024. This is official client behavior, not a sentence in `protocol.md`, and it is not a requirement to force ATT MTU 247.
 
@@ -664,7 +666,7 @@ Passport must: one BLE transaction at a time toward a given car, and never two V
 7. Command counter never decreases in `UpdateSessionInfo` versus `force_update_session`. Adopt the official signer.
 8. VCSEC command counters must arrive in order (`protocol.md` line 550) versus one shared verifier window for every domain (`verifier.go` lines 228–233). As a client, send VCSEC commands in order and do not overlap them. The verifier’s window is not permission to reorder.
 9. Response anti-replay is per request (`receiver.antireplay`) versus `Peer::response_window_` plus a reset that the caller must remember (`client.cpp` line 729). Adopt a window that is born with the request.
-10. （2026-11-25 总管复核）Official `ExchangeMTU` after Subscribe, with `DefaultMTU - 3` fallback (`ble.go` lines 349–357 at `0a582da` and `a4b43c1`), versus third-party “official does not exchange MTU.” Adopt the official client. Do not force ATT MTU 247, and do not raise the 1024 message cap.
+10. (Coordinator re-check, 2026-11-25) Official `ExchangeMTU` after Subscribe, with `DefaultMTU - 3` fallback (`ble.go` lines 349–357 at `0a582da` and `a4b43c1`), versus third-party “official does not exchange MTU.” Adopt the official client. Do not force ATT MTU 247, and do not raise the 1024 message cap.
 
 ---
 
@@ -727,261 +729,260 @@ Do not adopt: a domain-level response window, “reject counter 0,” window wid
 6. Remediation for fault codes 26, 27, and 28.
 7. A real VCSEC’s command-counter check versus the Go verifier’s shared 32-wide window. The client obligation is the spec’s in-order rule. No vehicle was observed.
 8. Which `VehicleStatus` fields a given car transmits on a given day. The proto3 zero defaults are specified. The bytes on the air are not in these repositories.
-9. 五点可执行约束已由 `4b1bd25` 写入根目录 README；本文件才是完整核实清单与不采信记录。云端清单原文写成时尚未改文档，这一条在裁决版中关闭。
+9. The five executable constraints were written into the root README by `4b1bd25`. This file is the complete verification checklist and the record of what was not accepted. When the original cloud checklist was written, the documents had not yet been changed. This item is closed in the adjudicated edition.
 
 
 ---
 
-# 材料来源（本裁决版收录）
+# Sources included in this adjudicated edition
 
-| 材料 | 时间（CST） | 角色 | 总管用法 |
+| Material | Time (CST) | Role | How the coordinator used it |
 | --- | --- | --- | --- |
-| 官方云端清单 [bc-d7db7c3b](https://cursor.com/agents/bc-d7db7c3b-b1b8-52a7-b6cc-5471aee508be) | 2026-11-25 | A 权威底本 | Part 1 / Part 2 几乎原文保留 |
-| 对 `1377473` 的官方复审 [bc-d18ff0ed](https://cursor.com/agents/bc-d18ff0ed-5706-54e9-8317-e91b47fc82dc) | 2026-11-25 | 官方代码独审 | FAIL 两项中等 + 省略锁态残留，决定当前修复范围 |
-| Antigravity 初稿 `tesla_interaction_spec_checklist.md` | 2026-11-25 | 三方研究，不完整 | 主干可参考；缺独立踩坑专章，不作完整清单 |
-| DeepSeek flash 清单 | 2026-11-25 | 只读对照 | 主干一致；产品 HMAC 长度未核对；状态页唤醒判定不采信为最终策略 |
-| DeepSeek v4-pro 复核（对 flash 逐条重写） | 2026-11-25 | 只读对照，优于 flash | 采信其对 flash 的勘误与产品 HMAC/窗口源头/回绕等核对；不采信状态页唤醒为可接受策略 |
-| Antigravity 详细踩坑清单 `tesla_protocol_and_pitfalls_detailed.md` | 2026-11-25 | 三方已踩坑补充 | 主干与官方一致；额外嵌入式避开项保留为后续，不扩大本轮修复 |
-| cite 风格长报告《车机交互规范与协议核实清单报告》 | 2026-11-25 | 三方综述，引用偏转写 | 主干部分可参考；多处把 B/C 写成 A，见下方不采信表 |
-| Word《车机交互规范只读核实清单（对照立项五个参考仓库）》 | 2026-11-25 23:22 | 三方只读对照（当时读不到产品仓，也未直读 session.go / ble.go） | 主干多数与官方一致，P-01–P-12 可作已踩坑索引；「用完即断」和把窗口 32 / 1024 降为未核实，以及 5.1 整节当编码门禁，见 R13–R16；「官方不交换 MTU」与 `session.go:43-53` 窗口误引，见 R14、R17 |
-| 总管 2026-11-25 23:50 原文再判 | 2026-11-25 23:50 | 总管亲自对照官方活对象，不默认第一次云审计必然正确 | 核心 A 项仍成立；补记 A22a；订正 R14、新增 R17；开发原则与后续研究计划见文末 |
+| Official cloud checklist [bc-d7db7c3b](https://cursor.com/agents/bc-d7db7c3b-b1b8-52a7-b6cc-5471aee508be) | 2026-11-25 | A authority base text | Part 1 / Part 2 kept almost verbatim |
+| Official re-review of `1377473` [bc-d18ff0ed](https://cursor.com/agents/bc-d18ff0ed-5706-54e9-8317-e91b47fc82dc) | 2026-11-25 | Official code unique review | FAIL: two medium items plus residual omitted lock state; this sets the current fix scope |
+| Antigravity first draft `tesla_interaction_spec_checklist.md` | 2026-11-25 | Third-party research, incomplete | The trunk may be used as a reference; it lacks a standalone pitfalls chapter and is not a complete checklist |
+| DeepSeek flash checklist | 2026-11-25 | Read-only comparison | The trunk agrees; the product HMAC length was not checked; the status-page wake judgment is not accepted as final policy |
+| DeepSeek v4-pro re-check (item-by-item rewrite of flash) | 2026-11-25 | Read-only comparison, better than flash | Accept its corrections of flash and its checks of the product HMAC, window origin, and wraparound; do not accept status-page wake as an acceptable policy |
+| Antigravity detailed pitfalls checklist `tesla_protocol_and_pitfalls_detailed.md` | 2026-11-25 | Third-party supplement of pitfalls already hit | The trunk agrees with official; extra embedded avoid-items are kept for later and do not expand this round's fix |
+| Cite-style long report *Vehicle-interaction specification and protocol verification checklist report* | 2026-11-25 | Third-party survey; citations lean on transcription | The trunk may be used as a reference; several places write B/C as A; see the not-accepted table below |
+| Word *Read-only verification checklist for the vehicle-interaction specification (against the five reference repositories named at project start)* | 2026-11-25 23:22 | Third-party read-only comparison (could not read the product repository at the time, and did not read session.go / ble.go directly) | Most of the trunk agrees with official; P-01-P-12 can serve as an index of pitfalls already hit; "disconnect when finished," demoting window 32 / 1024 to unverified, and treating all of section 5.1 as a coding gate, see R13-R16; "official does not exchange MTU" and the mistaken citation of `session.go:43-53` as the window, see R14 and R17 |
+| Coordinator re-judgment of the original text, 2026-11-25 23:50 | 2026-11-25 23:50 | The coordinator personally compared the official live objects and did not assume the first cloud audit was necessarily correct | Core A items still hold; A22a was added; R14 was corrected and R17 was added; development principles and the follow-up research plan are at the end of this file |
 
-仓库活对象仍以文首 Sources 表为准。`yoziru/tesla-ble` 仅对照，AGPL，不作运行时。
-
----
-
-# 本轮产品差距与修复范围（总管裁决）
-
-对照节点：`1377473`。域级共享窗口把新请求 `counter==0` 当重放的这一类，该提交已按 17 字节请求哈希分配窗口，方向正确；首次独审曾 PASS，按本清单复审后因原有中等问题 FAIL。
-
-当前要改、且不得扩大的三项：
-
-1. 超时或无回包时，不得把已经知道的锁态清成未知（`expire_pending` 在 LOCK_VERIFY / UNLOCK_VERIFY / 解锁超时等路径上的问题）。无回包不等于失败，更不得让界面因此变成「查锁态」。
-2. 打开状态页时，若车已知在休眠，不得先发 `RKE_ACTION_WAKE_VEHICLE`。这是为读状态而做的隐式唤醒，官方复审按 A23 / A24 / A26 判中等 FAIL。
-3. proto3 省略的 `vehicleLockState` 不得显示未闭锁。字段未出现时不得把默认 0 当成已核对的 UNLOCKED。
-
-明确延后、本轮不动：窗口宽度 64 与官方 32 对齐（须改错误注释；是否收窄到 32 另做安全评审）；域窗口回退路径须核实所有签名请求都已 `note_req_id`，但在已识别请求上不应走回退；产品 BLE 与官方 A22a（订阅后 `ExchangeMTU`，失败回退）的对照与对齐。不刷 `1377473` 及后续未独审修复，除非用户另行明确授权。
+Live repository objects remain those in the Sources table at the top of this file. `yoziru/tesla-ble` is comparison only, AGPL, and is not the runtime.
 
 ---
 
-# Part 3 — 三方研究报告裁决（含不采信）
+# Product gap and fix scope for this round (coordinator adjudication)
 
-分类沿用官方清单：A 官方真值，B 三方已核实证据（不得覆盖 A），C 未核实或本地定时，不得当协议规范。
+Comparison node: `1377473`. For the class of bug in which a domain-level shared window treats a new request's `counter==0` as a replay, that commit already allocates the window from the 17-byte request hash. The direction is correct. The first unique review once passed. After re-review against this checklist it fails because of pre-existing medium issues.
 
-下列「采信」是指：可以写进后续避开检查或产品对照，并且不与官方冲突。「不采信」是指：不得再当作官方规范、不得据此扩大本轮修复、不得写回共识文档当必须执行的官方要求。条目本身必须保留，方便以后的智能体查到已经驳回过。
+The three items that must be changed now, and must not be expanded:
 
-## 3.1 采信（与官方一致，或为官方的已踩坑佐证）
+1. On timeout or no reply, do not clear an already-known lock state to unknown (the `expire_pending` problem on the LOCK_VERIFY / UNLOCK_VERIFY / unlock-timeout paths). No reply is not failure, and it must not make the UI become "look up the lock state."
+2. When opening the status page, if the car is already known to be asleep, do not first send `RKE_ACTION_WAKE_VEHICLE`. That is an implicit wake in order to read status. The official re-review judges it a medium FAIL under A23 / A24 / A26.
+3. An omitted proto3 `vehicleLockState` must not be shown as unlocked. When the field is absent, the default 0 must not be treated as a checked UNLOCKED.
 
-1. 响应防重放必须绑定同一条请求；首包（含 `counter==0`）接受；同请求重复才拒绝；乱序只在窗口内允许。官方窗口宽度是 32，不是 64。三方 flash / v4-pro / AG 详细清单与官方 Part 1 的 A13–A16 一致，采信。
-2. 域级共享窗口会把新请求合法首包 0 误判为重放。这是当晚同类问题的根因类别，也是官方 P1。产品 `1377473` 方向正确。采信。
-3. 命令计数器与响应计数器不是同一个计数器；不得拿响应 counter 去和发送/会话 counter 比大小。采信（v4-pro P-02，官方 A7）。
-4. VCSEC 最多约三帧回包；不得把第一帧当终态；同时只发一条 VCSEC 请求；空 `request_uuid` 必须能归属（常用 16 字节 routing address）。无回包可能已经执行，变动命令不得因超时自动补发。ACK / OK 不等于已执行。采信。
-5. 两域两套会话。纯门锁、后备箱、VCSEC 状态读取不得为了这些动作去握手 Infotainment。官方 issue 468 的有效含义是这一条，不是「官方禁止一切轮询」。采信其正确部分。
-6. 唤醒必须显式：`RKE_ACTION_WAKE_VEHICLE` 或 Fleet `wake_up`。VCSEC 在 Infotainment 休眠时仍可达；`GET_STATUS` 可以不鉴权，不得当成唤醒手段。后台自动刷新不得唤醒。采信官方 A23–A26；三方 `NO_WAKE_SKIP` / 660 s 作为 B/C 策略可参考，不得标成 A。
-7. SessionInfo HMAC 必须完整 32 字节并常量时间比较。v4-pro 核对比 flash 更准：产品已经这样做，0Bu pinned 库接受 16 字节前缀是 0Bu 的偏离，不适用于产品。采信 v4-pro，改正 flash。
-8. 64 位窗口的源头是 yoziru `sliding_window.h` 的 `WINDOW_SIZE=64`，0Bu 继承，产品沿用；产品头文件把 64 写成 official `window.go` 是错的。采信 v4-pro。官方值仍是 32。本轮只记下，不先改宽度。
-9. 产品同 epoch 的 `clock_time` 回退直接拒绝；随机数失败 fail-closed；请求 counter 到 `UINT32_MAX` 拒绝、不归零。v4-pro 与官方 signer 能对上。采信，且这些已对齐，不必当本轮缺陷来改。
-10. 产品分块 1000 ms / 1024 B、握手 4 s（`PK_SESSION_CHALLENGE_MS=4000`）与官方 BLE 参考实现一致。0Bu 的 3000 ms / 2048 B 是刻意偏离，无本机证据不要搬。采信。
-11. 明文回包没有加密响应 counter；不得把明文的 0 送进加密窗口。0Bu「一明文一请求」可以更严，但不与官方冲突。采信其区分，不把更严写成官方义务。
-12. AG 详细清单中与官方主干一致的避开项采信。其中路由地址轮换、SessionInfo 公钥绑定、AddKey 的 PRESENT_KEY 成帧、nanopb 的 `has_` 与零值、NimBLE / ESP32-C3 内存与断连清理，作为后续嵌入式避开项保留，不纳入本轮三项修复。
-13. proto3 省略字段的零值陷阱（锁态、关闭件、睡眠）采信官方 App1–App3，本轮锁态显示必须改。
-
-14. `FLAG_ENCRYPT_RESPONSE` 是位序号，掩码必须是 `1 << 1 = 2`。写成 1 实际置的是 `FLAG_USER_COMMAND`，实车常见 Fault 28（Issue #390）。响应 AAD 即使 `flags==0` 也必须带 `TAG_FLAGS`。与官方 Part 1 摘要一致。这是实现约束，不是本轮三项之一。
-15. 响应解密 AAD 的 `TAG_COUNTER` 必须用响应自身的 `AES_GCM_Response_data.counter`，并且必须先完整校验 GCM tag 再入窗。yoziru v5.2.0 曾误用请求 counter、漏验 tag，至 v6.0.0 / 0Bu patch 0006 才修。与官方 A12 一致。该 Word 报告的 P-02 采信。
-16. 不要在 BLE 收流上做启发式找帧头；长度非法或超过 1024 就丢弃复位。连上后要丢掉匹配不到本端 routing address 的 31/41 字节被动认证帧（官方 Issue #390；该报告 P-05）。作为后续嵌入式避开项保留，不进本轮三项。
-17. 官方维护者在 Issue #368 确认：车辆不是 AWAKE 时，`BodyControllerState` 的充电口状态会恒报关闭，部分字段只是休眠前的锁存。界面不得把这时的「关闭」当成当前插枪或开关真相。这是后续 UI 规则，不进本轮三项（本轮只改省略锁态）。
-18. Issue #366：显式唤醒之后不要立刻去握手 Infotainment，车端未就绪可能返回 Fault 11 或一直等到超时；休眠期 Infotainment 握手失败，也不应拆掉仍可用的 BLE。等待步长属于 C，日后实车标定，不进本轮。
-19. 不要因为远端 VCSEC 故障或错误文本就自动删除、重建本地私钥；随机数失败必须 fail-closed。与 0Bu 指南 / patch 0007 及上面第 9 条一致。存储事务和公钥绑定是后续项，不重开本轮 NVS 方案（见 R6）。
-20. 不要照搬 0Bu 或 TeslaBleHttpProxy 默认的 Charging Manager 角色。官方角色见 A30。Passport 若要门锁和前后备箱，必须按产品最小必要权限选角色。这是配对约束，不进本轮三项。
-21. 该 Word 报告的 WAK-06 与官方复审一致：为读状态不得隐式唤醒，打开页面默认只走 VCSEC。这一点采信，并用来对照 R1——DeepSeek 把状态页一次唤醒当成可接受策略，这份报告没有沿用那个错误。
-
-
-## 3.2 不采信或降级（必须保留，避免再被当规范）
-
-### R1. 打开状态页时唤醒一次，属于可接受的产品策略
-
-出现位置：DeepSeek flash；v4-pro 的 B-38、X-06、5.2「明确为用户显式动作」；部分摘要把 status 页一次唤醒与后台不唤醒写成不矛盾。
-
-不采信原因：官方复审 [bc-d18ff0ed](https://cursor.com/agents/bc-d18ff0ed-5706-54e9-8317-e91b47fc82dc) 已按「读状态不得隐式唤醒」判中等 FAIL。用户打开状态页是为了读状态，不是发出「唤醒车辆」这一动作。官方 A23 的显式唤醒是 `RKE_ACTION_WAKE_VEHICLE` 或 Fleet `wake_up`；A24 / A26 写明状态读取不应为此把休眠车叫醒。本轮必须改掉这条产品路径。后台不唤醒仍然成立，但不能用来为状态页隐式唤醒开脱。
-
-### R2. 把 issue 468 写成「官方禁止对休眠车高频轮询」并标为 A
-
-出现位置：cite 风格长报告 1.5、5.1 第 06 条。
-
-不采信原因：issue 468 讲的是 HTTP 代理不要为任意命令同时向 VCSEC 和 Infotainment 握手，以免 Infotainment 休眠时把本来可独立工作的 VCSEC 命令一起拖死。这与 A1、A23 一致，应采信。但官方全文没有把「禁止高频后台轮询」写成 protocol 条文。后台不唤醒是三方实战的 B 策略（以及产品功耗政策），官方未禁止不等于官方规定了间隔，也不得标 A。正确的官方表述是：唤醒必须显式；不得为了刷新状态去唤醒或去轮询 Infotainment。
-
-### R3. 把「命令结束后必须断开 BLE / 15 秒硬超时后 `ble_gap_terminate`」写成官方要求
-
-出现位置：cite 风格长报告 1.4、2.4、5.1 第 07 条；Word 只读清单的 BLE-04、P-08、5.1「用完断开」表述（详见 R13）。
-
-不采信原因：车端 VCSEC 最多约 3 个并发 BLE 连接，是官方事实（本清单 A21，issue 469）。挂起不释放会占槽，三方 Docker 超时杀进程是 B 类教训，可以记。但官方没有要求钥匙客户端每做完一个动作就断开，也没有规定 15 秒硬超时。Passport 是钥匙，保持连接可以是产品策略。不得把「用完必断」写进共识当官方义务，也不纳入本轮修复。
-
-### R4. 把 0Bu 的 16 字节 SessionInfo HMAC 前缀当成产品也必须修的缺口
-
-出现位置：DeepSeek flash 对 0Bu B 项的转写，未核对产品 tag 长度。
-
-不采信原因：v4-pro 已核对产品要求 `tag_len == 32` 且常量时间比较。0Bu 偏离不适用于产品。保持 32 字节，不要学前缀。flash 这一处已被 v4-pro 勘误，以后以 v4-pro 与本裁决为准。
-
-### R5. 把产品窗口宽度 64 写成官方值，或把「本轮必须改成 32」写成已经在修的范围
-
-出现位置：产品头文件注释；部分转写未区分「官方值」与「本轮修复范围」。v4-pro 正确指出了源头和注释错误。
-
-部分采信、范围上不采信：官方是 32，64 是更宽偏离，注释必须改，安全评审再决定是否收窄。这不是当前三项修复之一，不得借本轮改窗口宽度，也不得把 64 继续写成 official `window.go`。
-
-### R6. 把 NVS 双页轮换、CRC32、禁止 Safe Mode 写成必须立刻落地的交互规范
-
-出现位置：cite 风格长报告 2.3。
-
-不采信为协议规范：这是 0Bu / ESP32 存储层踩坑，不是 `vehicle-command` 的会话规则。产品会话目前是 RAM-only，每次连接重握手，不适用官方缓存老化的三条恢复条件。存储层可以日后参考双页与校验，但不进本轮交互修复，不得标 A，也不得要求现在改 NVS 方案。
-
-### R7. 超时、BUSY 或 `INVALID_TOKEN_OR_COUNTER` 就自动重发变动命令
-
-出现位置：cite 风格长报告 1.6 的「自动恢复策略」（例如 TIMEOUT 后重连、INVALID_TOKEN_OR_COUNTER 更新 counter 后重发）。
-
-不采信其笼统自动重发：官方 A29 写明没收到回包时作动器可能已经执行，不得把超时当成干净失败并自动补发变动命令。会话失步类故障可以按 A28，在完成 A6 的会话更新后，用新的命令 counter 再签一条；这与「同一条可能已执行的作动因超时再发一次」不是一回事。配对失败与权限不足应停止，而不是重试。
-
-### R8. 把 7 s、660 s、5 s、15 s、30 s 等定时写成官方规范
-
-出现位置：若干三方摘要把实战定时与官方 BLE 1 s / 4 s 写在一起；cite 报告的 15 s 断连；local-control / yoziru 的 660 s；Word 只读清单 5.1 把「彻底禁用后台定时轮询」写成可直接采用的基线。
-
-不采信为 A：官方有依据的定时主要是 BLE 分块 1 s、官方 BLE 客户端会话信息年龄 4 s、最大帧 1024。7 s 唤醒沉降、660 s 休眠轮询下限、5 s 命令预算、15 s 断连都是 C 或 B 的产品/三方政策，可参考，不得标官方。
-
-### R9. 把 Antigravity 初稿当作已经全面的交互规范清单
-
-出现位置：AG 第一次交付的 `tesla_interaction_spec_checklist.md`。
-
-不采信为完整清单：初稿缺少独立的「三方已踩坑」专章，也没有把「域共享窗口把新请求 counter 0 当重放」写成必须再避开的检查项。硬件 H 项仍是硬件契约，不是车机协议。其后应以官方云端清单为本，并以本 Part 3 收纳后续研究报告。
-
-### R10. 依据过期或记忆中的 ADR-0003，说现行 0Bu 规范是「拒绝 counter 0」
-
-出现位置：立项后的过期转述；官方清单 P9 已指出 ADR-0003 已被取代。
-
-不采信：现行 ADR-0005 并不写「拒绝 counter 0」。它写的是认证成功后的窗口包含 counter 0，重复（包括重复的 0）才丢弃。不得再用被取代文本。
-
-### R11. 把产品比官方更严的做法写成官方要求
-
-出现位置：cite 报告与部分转写中，把强制 16 字节 routing address、命令结束必断、持久化计数器方案等写成 A。
-
-不采信其升格：产品可以更严，且强制 routing address、UUID 可选，与官方 VCSEC 空 UUID 兼容，这是可接受的产品选择。但不得反写「官方要求 UUID 必须存在」或「官方要求用完断开」。官方要求是什么，以 Part 1 为准。
-
-### R12. 用 Google 转写链接和「[cite: N]」代替行号锚点，把转写结论直接标 A
-
-出现位置：cite 风格长报告全文。
-
-不采信其引用形式作为核验依据：其中与官方原文一致的规则可以保留，但核验必须回到 `vehicle-command` 活对象上的路径与行号（以本文件 Part 1 与 v4-pro 带行号的条目为准）。转写增补、升格或省略处，以本不采信表为准。
-
-### R13. 把「按需短连、用完即断」和各 BLE 步骤后的强制断开写成可直接落地的官方基线
-
-出现位置：Word 只读清单 BLE-04、P-08、5.1 第 2 条。
-
-不采信为官方义务：与 R3 相同。车端最多约 3 个并发 BLE 连接是官方事实；iPad 等占满槽位后会表现为「唤不醒」，以及底层连接挂死需要硬超时，这些是该报告和 tesla_ble_mqtt_docker / TeslaBleHttpProxy 的 B 类教训，可以记。但官方没有要求钥匙每做完一个动作就断开，也没有规定空闲断连秒数。该报告自己在 5.2 也把空闲断连时长列为待实车标定的 C。Passport 保持连接可以是产品策略。本轮不改连接策略。
-
-### R14. 因为这份报告没读到 `session.go` / `ble.go`，就把官方窗口宽度 32 或最大帧 1024 B 降回「仍待复核」
-
-出现位置：Word 只读清单开篇边界、WIN-04、CNF-03、5.2；以及该报告把 `internal/dispatcher/session.go:43-53` 写成「精确 windowSize = 32 与滑窗实现」。
-
-不采信其降级，并订正其行号：2026-11-25 23:50 总管亲自核对 `0a582da` 与更早的 `a4b43c1`。`windowSize = 32` 在 `internal/authentication/crypto.go` 第 21 行（注释写明 `Verifier.windowSize` 是 `uint64`，故宽度必须 ≤ 64）；算法在 `internal/authentication/window.go`；按请求使用发生在 `session.decrypt` 对 `handler.antireplay.Update`。这两个提交里，`session.go:43-53` 是 `newSession` / `decrypt` 开头，不是窗口常量或滑窗实现。不得用这份未读到的边界或错误行号，否定已经核过的官方值。本轮仍然不改产品窗口宽度 64。
-
-### R15. 因为当时读不到产品仓，就把「`1377473` 尚未核对与规范的差距」当成对我们仍然开放的未知
-
-出现位置：Word 只读清单开篇、5.2 第一条。
-
-不采信为当前状态：该报告确实没读到产品代码，所以它不能对 `1377473` 的 C 实现下结论。我们这边已有首次独审 PASS（[bc-e5fb9eb2](https://cursor.com/agents/bc-e5fb9eb2-8183-58be-bf29-93cd3379d170)）和按本清单的复审 FAIL（[bc-d18ff0ed](https://cursor.com/agents/bc-d18ff0ed-5706-54e9-8317-e91b47fc82dc)）。当前差距以本文件「本轮产品差距与修复范围」为准，不要再用「仓库不可访问」把三项修复说成还没对照过。
-
-### R16. 把 5.1「已核实可直接采用、可直接落地编码」整节当作合入门禁
-
-出现位置：Word 只读清单第 5.1 节；该节导出文本还夹杂了损坏的 `[cite:]` 标记。5.2 把过长 TTL 写成 Fault 209。
-
-不采信其整节效力：与官方一致的条目已经分别采信。混入的「用完断开」「彻底禁用后台定时轮询」不得当官方门禁，见 R13、R2、R8。核验仍须回到仓库路径与本文件 Part 1 的行号，不能靠文末编号或损坏的 cite 标记。过长 TTL 对应的官方枚举是 `TIME_TO_LIVE_TOO_LONG`（20），209 是笔误，不得当新的故障码。
-
-### R17. 把「官方 `ble.go` 默认不发起 ATT MTU 交换」写成官方行为
-
-出现位置：Word 只读清单关于 ESP32-C3 NimBLE / MTU 的待核实项；其依据接近 0Bu ADR-0005 对更早官方客户端的转述，并点名 `ble.go` 约第 349 行。
-
-不采信：在权威提交 `0a582da`，以及该报告建议复核的 `a4b43c1`，`pkg/connector/ble/ble.go` 第 349–357 行都是订阅 RX 之后立刻 `ExchangeMTU(maxBLEMTUSize)`，失败则回退 `ble.DefaultMTU - 3`，成功则 `min(txMtu, 1024) - 3`。第一次官方云审计记下了 write-with-response、1024 与 1 s 分片超时，但漏记了这一段，这是该次审计的缺口，不是「官方不交换 MTU」。247 仍不是 `protocol.md` 义务，也不得把最大帧抬到 2048。产品是否已经这样做，放到后续对照，不纳入本轮三项修复。
-
-## 3.3 DeepSeek flash 相对 v4-pro 的勘误（采信 v4-pro）
-
-以后若只看到 flash 版，以下以 v4-pro 及本裁决为准：
-
-1. 产品 SessionInfo HMAC 已是完整 32 字节常量时间比较；flash 未核产品 tag 长度。
-2. 64 位窗口源头是 yoziru，不是官方。
-3. 产品拒绝同 epoch 的 `clock_time` 回退；RNG 失败 fail-closed；`UINT32_MAX` 保护与官方 signer 对应。
-4. `PK_SESSION_CHALLENGE_MS=4000` 与官方 4 s 对齐；偏离的是 0Bu，不是产品。
-5. 核心结论不变，但状态页唤醒不得按 v4-pro / flash 的「C 产品策略、可接受」执行，见 R1。
-
-## 3.4 不要做的事（给后续智能体）
-
-- 不要用三方报告替换官方独审，也不要用本文件替换对具体提交的官方代码独审。第一次云审计可以订正，但订正必须回到官方原文，不能用另一份三方报告直接覆盖。
-- 不要把 R1–R17 的不采信结论再写回实现提示词，当作要做的新功能。
-- 不要在本轮修改窗口宽度、域窗口回退、NVS 方案、命令结束断连、强制 MTU 247，或引入 yoziru 运行时。
-- 不要因为某份报告没读到 `session.go`，或引用了错误的 `session.go:43-53`，就否定官方窗口宽度 32 已经核实。
-- 不要再把「官方不交换 MTU」写进规范；官方客户端在订阅后会交换，失败才回退默认 ATT。
-- 不要改 `main` 或 `feature/tesla-key`，不要刷机，除非用户另行明确授权。
+Explicitly deferred, and not touched this round: aligning window width 64 with the official 32 (the wrong comment must be changed; whether to narrow to 32 is a separate security review); the domain-window fallback path must be checked so that every signed request has already called `note_req_id`, but a request that has already been identified must not take the fallback; comparison and alignment of product BLE with official A22a (`ExchangeMTU` after subscribe, fall back on failure). Do not flash `1377473` or later fixes that have not passed unique review, unless the user separately and explicitly authorizes it.
 
 ---
 
-# 总管判断与开发原则（2026-11-25 23:50 CST）
+# Part 3 — Adjudication of third-party research reports (including what is not accepted)
 
-我按全部研究材料，并亲自核对官方 `protocol.md`、`internal/authentication/crypto.go` / `window.go`、`internal/dispatcher/session.go`、`pkg/connector/ble/ble.go` 和 `signer.go` 后，结论如下。
+Classification follows the official checklist: A is official truth, B is third-party evidence that has been checked and must not override A, and C is unverified or a local timer and must not be treated as a protocol norm.
 
-第一次官方云审计（[bc-d7db7c3b](https://cursor.com/agents/bc-d7db7c3b-b1b8-52a7-b6cc-5471aee508be)）在核心判断上是对的，不是“因为官方发起就对”，而是原文支持它：两个域两套会话；命令计数器与响应计数器不是同一套；响应防重放按同一条请求，第一个 counter（包括 0）必须接受，同一请求上复用必须拒绝；官方窗口宽度是 32；VCSEC 同时只发一条、最多约三个回包，无回包可能已经执行，不得自动补发作动；VCSEC 在 Infotainment 休眠时仍可经 BLE 到达，唤醒必须显式，不得为读状态隐式唤醒；`GET_STATUS` 可以无认证；proto3 省略的锁态不得显示未闭锁；车端大约只有 3 个 BLE 连接槽。对 `1377473` 按清单复审的 FAIL（[bc-d18ff0ed](https://cursor.com/agents/bc-d18ff0ed-5706-54e9-8317-e91b47fc82dc)）我仍然接受：超时清掉已知锁态、打开状态页隐式唤醒，加上省略锁态显示，就是当前要修的三项。DeepSeek 把状态页唤醒降成「可接受的产品策略」，我不接受。
+"Accepted" below means it may be written into a later avoid-again check or into a product comparison, and it does not conflict with official. "Not accepted" means it must not again be treated as official specification, must not be used to expand this round's fix, and must not be written back into the consensus document as an official requirement that must be carried out. The item itself must be kept, so later agents can see that it was already rejected.
 
-它也不是完整无缺。`protocol.md` 有的地方写得含糊，例如响应 AAD 的 `TAG_COUNTER` 写着 “initially session_info.counter”，实现上必须用 `AES_GCM_Response_data.counter`，并且先通过 GCM 再更新窗口；官方源码才是这些地方的最终依据。第一次云审计漏记了官方 `ble.go` 在订阅后 `ExchangeMTU`、失败回退默认 ATT。若干三方报告有真实踩坑，但常把产品策略、过期 ADR、错误行号或没读到的源码升格成官方规范。这些我记下并驳回，免得以后再论证一遍。
+## 3.1 Accepted (agrees with official, or is evidence of a pitfall already hit against official)
 
-交互规范的理解，以及这把蓝牙钥匙该怎么开发：我们要做的是口袋里的钥匙，不是车况轮询器，也不是充电管理器。协议层只做官方规定的事——按域建会话，按请求防重放，作动诚实，状态诚实，唤醒克制。车在睡觉时，用 VCSEC 读写锁和开闭，不要为了看一眼状态就把信息娱乐系统拉起来；按了锁却暂时没有回包，就承认可能已经执行，不要清掉已经知道的锁态，更不要自动再发一次。屏幕上没看到的字段就是未知，不是“默认未锁”或“默认关闭”。链路层跟官方客户端走：write-with-response、1024、1 秒分片超时、订阅后尝试 MTU 交换并允许回退，但不把 247、用完即断、7 秒或 15 秒定时写成 Tesla 的规定。第三方仓库只用来避免别人已经踩过的坑，不拿来当规范，也不把它们的角色或轮询习惯抄进来。产品可以比官方更严，但不能把更严的选择说成官方要求。硬件上这是一块没有 PSRAM 的 ESP32-C3，会话层保持薄实现，按键和功耗让位于“先做对，再做省”。
+1. Response anti-replay must be bound to the same request. The first packet, including `counter==0`, is accepted. Only a repeat on the same request is rejected. Out-of-order is allowed only inside the window. The official window width is 32, not 64. Third-party flash / v4-pro / the AG detailed checklist agree with official Part 1 A13-A16. Accepted.
+2. A domain-level shared window misjudges a new request's legal first packet 0 as a replay. This is the root-cause class of that same problem, and it is official P1. Product `1377473` points in the right direction. Accepted.
+3. The command counter and the response counter are not the same counter. Do not compare the response counter with the transmit or session counter. Accepted (v4-pro P-02, official A7).
+4. VCSEC returns at most about three frames. Do not treat the first frame as terminal. Send only one VCSEC request at a time. An empty `request_uuid` must still be attributable, commonly by a 16-byte routing address. A missing reply may already have been executed. A state-changing command must not be automatically resent because of a timeout. ACK / OK does not mean already executed. Accepted.
+5. Two domains, two sessions. A lock-only action, a trunk action, or a VCSEC status read must not handshake Infotainment in order to do those things. The valid meaning of official issue 468 is this sentence, not "official forbids all polling." Accept the correct part.
+6. Wake must be explicit: `RKE_ACTION_WAKE_VEHICLE` or Fleet `wake_up`. VCSEC remains reachable while Infotainment is asleep. `GET_STATUS` may be unauthenticated and must not be used as a wake method. Background auto-refresh must not wake. Accept official A23-A26. Third-party `NO_WAKE_SKIP` / 660 s may be referenced as B/C policy and must not be labeled A.
+7. The SessionInfo HMAC must be a full 32 bytes and compared in constant time. v4-pro's check is more accurate than flash: the product already does this. The 0Bu pinned library accepting a 16-byte prefix is a 0Bu departure and does not apply to the product. Accept v4-pro and correct flash.
+8. The origin of the 64-wide window is yoziru `sliding_window.h` `WINDOW_SIZE=64`. 0Bu inherited it and the product followed. The product header that writes 64 as official `window.go` is wrong. Accept v4-pro. The official value is still 32. This round only records that and does not change the width first.
+9. The product rejects a same-epoch `clock_time` rollback outright. RNG failure is fail-closed. A request counter of `UINT32_MAX` is rejected and is not wrapped to zero. v4-pro lines up with the official signer. Accepted, and these are already aligned, so they are not changed as defects of this round.
+10. Product chunking of 1000 ms / 1024 B and a 4 s handshake (`PK_SESSION_CHALLENGE_MS=4000`) agree with the official BLE reference client. 0Bu's 3000 ms / 2048 B is a deliberate departure. Do not copy it without on-device evidence. Accepted.
+11. A plaintext reply has no encrypted response counter. Do not feed a plaintext 0 into the encryption window. 0Bu's "one plaintext, one request" may be stricter and does not conflict with official. Accept the distinction. Do not write the stricter rule as an official obligation.
+12. Avoid-items in the AG detailed checklist that agree with the official trunk are accepted. Among them, routing-address rotation, SessionInfo public-key binding, AddKey PRESENT_KEY framing, nanopb `has_` versus a zero value, and NimBLE / ESP32-C3 memory and disconnect cleanup are kept as later embedded avoid-items. They are not part of this round's three-item fix.
+13. The proto3 omitted-field zero trap for lock state, closures, and sleep is accepted as official App1-App3. Lock-state display must be changed this round.
+14. `FLAG_ENCRYPT_RESPONSE` is a bit index. The mask must be `1 << 1 = 2`. Writing 1 actually sets `FLAG_USER_COMMAND`, and on a real car the common result is Fault 28 (Issue #390). Response AAD must include `TAG_FLAGS` even when `flags==0`. This agrees with the official Part 1 summary. It is an implementation constraint, not one of this round's three items.
+15. `TAG_COUNTER` in the response-decryption AAD must use the response's own `AES_GCM_Response_data.counter`, and the GCM tag must be fully checked before the counter enters the window. yoziru v5.2.0 once used the request counter by mistake and skipped the tag check. That was fixed only in v6.0.0 / 0Bu patch 0006. This agrees with official A12. P-02 of that Word report is accepted.
+16. Do not heuristically search for a frame header on the BLE receive stream. If the length is illegal or above 1024, discard and reset. After connect, drop 31/41-byte passive authentication frames that do not match this endpoint's routing address (official Issue #390; that report's P-05). Keep this as a later embedded avoid-item. It does not enter this round's three items.
+17. The official maintainer confirmed in Issue #368: when the vehicle is not AWAKE, `BodyControllerState` charge-port state is constantly reported closed, and some fields are only latches from before sleep. The UI must not treat "closed" at that moment as the current truth of plug-in or of open versus closed. This is a later UI rule and does not enter this round's three items. This round changes only the omitted lock state.
+18. Issue #366: after an explicit wake, do not immediately handshake Infotainment. The vehicle may not be ready and may return Fault 11 or wait until timeout. An Infotainment handshake failure during sleep must also not tear down a BLE link that is still usable. The wait step is Class C, to be calibrated on a real car later, and does not enter this round.
+19. Do not automatically delete and recreate the local private key because of a remote VCSEC fault or an error string. RNG failure must be fail-closed. This agrees with the 0Bu guide / patch 0007 and with item 9 above. Storage transactions and public-key binding are later items. Do not reopen this round's NVS plan (see R6).
+20. Do not copy the Charging Manager role that 0Bu or TeslaBleHttpProxy use by default. Official roles are A30. If Passport needs the locks and the front and rear trunks, choose the role by the product's minimum necessary privilege. This is a pairing constraint and does not enter this round's three items.
+21. WAK-06 of that Word report agrees with the official re-review: do not implicitly wake in order to read status, and opening a page defaults to VCSEC only. This point is accepted, and it is the contrast with R1. DeepSeek treated one wake on the status page as an acceptable policy. This report did not follow that error.
 
-# 后续研究计划（按 P00–P17，并按集中测试，2026-11-25 23:58 CST）
 
-基础版的正式目标仍是 P00 到 P17。P03 是公共基础裁决，不是终点；P17 才是正式固件开发完成的裁决。未过正式门禁的候选，不能叫做正式基础版固件。协议研究与修复纳入这条节奏，不另开平行路线。
+## 3.2 Not accepted, or downgraded (must be kept, so they are not treated as specification again)
 
-硬令：拒绝更新一次就测试一次。能在刷机前做的代码与官方独审都先做完，中途不再为单个修复叫用户刷机验证。用户只在授权后集中刷机、集中测试。
+### R1. Waking once when the status page is opened is an acceptable product policy
 
-## 一、刷机前：把能做的都做完
+Where it appears: DeepSeek flash; v4-pro B-38, X-06, and 5.2 "explicitly a user action"; some summaries write one wake on the status page and no wake in the background as if they do not contradict.
 
-当前进行中的三项修复本单不扩大：超时不清已知锁态、状态页不隐式唤醒、省略锁态不显示未闭锁。这三项先完成并经独立核对与官方独审。
+Why not accepted: the official re-review [bc-d18ff0ed](https://cursor.com/agents/bc-d18ff0ed-5706-54e9-8317-e91b47fc82dc) already judged a medium FAIL under "reading status must not implicitly wake." The user opens the status page in order to read status, not to issue the action "wake the vehicle." The explicit wake in official A23 is `RKE_ACTION_WAKE_VEHICLE` or Fleet `wake_up`. A24 / A26 state that a status read must not wake a sleeping car for that purpose. This round must change that product path. "Do not wake in the background" still holds, but it cannot excuse an implicit wake on the status page.
 
-三项通过后，在同一候选上继续做不依赖实车的协议对齐，仍一次一件、先独审再改，且都不需要先上车：
+### R2. Writing issue 468 as "official forbids high-frequency polling of a sleeping car" and labeling it A
 
-- 改掉把窗口 64 写成 official `window.go` 的错误注释，并单独评审是否收到官方 32
-- 核实所有签名请求都已登记请求身份，避免走到域窗口回退
-- 核对 FLAG 掩码、响应 AAD 使用响应计数器、GCM 先于窗口更新、未匹配的 31/41 字节认证帧丢弃
-- 核对接对角色不是 Charging Manager
-- 对照并在代码侧按官方客户端对齐：订阅后 `ExchangeMTU`、失败回退默认 ATT，以及 write-with-response、1024、1 秒分片超时
+Where it appears: cite-style long report 1.5, and item 06 of section 5.1.
 
-以上全部经官方独审后，才请求一次授权刷机。在此之前不刷机，设备保持现状。
+Why not accepted: issue 468 says an HTTP proxy must not handshake both VCSEC and Infotainment for an arbitrary command, lest a VCSEC command that could have worked on its own be dragged down while Infotainment is asleep. That agrees with A1 and A23 and should be accepted. The official text does not write "forbid high-frequency background polling" as a protocol article. Not waking in the background is a third-party field B policy, and a product power policy. Official silence is not an official interval, and it must not be labeled A. The correct official statement is: wake must be explicit; do not wake, and do not poll Infotainment, in order to refresh status.
 
-## 二、授权后只集中测试一次
+### R3. Writing "BLE must be disconnected when a command ends / `ble_gap_terminate` after a 15-second hard timeout" as an official requirement
 
-同一镜像、同一次测试里完成，不再拆成多次刷机：
+Where it appears: cite-style long report 1.4, 2.4, and item 07 of section 5.1; the Word read-only checklist's BLE-04, P-08, and section 5.1 wording "disconnect when finished" (see R13).
 
-- **P00**：对该精确对象采集镜像校验、启动版本、ELF 前缀等设备身份证据。旧对象的 P00 记录不自动继承。
-- **P01**：硬件指南阅读已交付，只作为适用门禁保留，不再单独安排测试。
-- **P02**：真机启动、屏幕与三键、BLE 初始化、存储与重启；并补拔 USB、30 秒息屏、续航深睡、首钥匙仅唤醒、设置保持。未观察不写 PASS。
-- 车上回归：锁、解锁、前盖、后备箱；休眠车打开状态页不唤醒；无回包仍保持已知锁态；缺字段不显示未锁。
-- 同一次实车可观察的项：唤醒后不要立刻与 Infotainment 握手（issue 366）；连接槽是否被占死；休眠时充电口是否为旧闩锁（issue 368）。先观察，再决定产品策略，不提前写成官方义务。
+Why not accepted: vehicle-side VCSEC can hold at most about 3 concurrent BLE connections. That is an official fact (A21 of this checklist, issue 469). Leaving a connection up without releasing it occupies a slot. A third-party Docker image killing the process on timeout is a Class B lesson and may be recorded. Official text does not require a key client to disconnect after every action, and it does not specify a 15-second hard timeout. Passport is a key. Keeping the connection can be a product policy. Do not write "must disconnect when finished" into the consensus document as an official obligation, and do not include it in this round's fix.
 
-`47fd967` 上的主机探针和有限 P00 证据，不能直接当作后来提交的 P03 或 P16 证据。
+### R4. Treating 0Bu's 16-byte SessionInfo HMAC prefix as a gap the product must also fix
 
-## 三、集中测试通过后再按 P 级推进
+Where it appears: DeepSeek flash's transcription of 0Bu B items, without checking the product tag length.
 
-- **P03** 总管根据该精确对象的官方独审、构建与本次集中测试证据，裁决公共基础。未过门禁不得进入 P04。
-- **P04** 从已接受的公共基础冻结基础版入口、按键、反馈、禁用态和验收清单，不另起炉灶改界面。
-- **P05** 从已接受基础拉出基础版独立分支，不覆盖已有独有成果，不改 `main`。
-- **P06** 收敛基础版构建配置、模块与后台任务，变更经官方独审后再进入依赖项。
-- **P07** 三键导航，最多三台车的选择与切换。
-- **P08** 必要配对引导、容量、删除确认与异常界面；模拟验证，实车配对若需要，并入下一次集中测试，不单独为它刷机。
-- **P09** 接通开锁、锁车、前盖、后备箱四类动作入口与反馈。
-- **P10** 官方云端独审误触、重复意图、驻车条件、超时、未知结果与不自动补发。刷机前已修并独审过的同类契约，仍须在基础版分支的精确对象上正式过闸，不能用修候选的一次独审代替。
-- **P11** 运行、空闲、连接、休眠与按键唤醒状态机；先做代码与官方独审。
+Why not accepted: v4-pro already checked that the product requires `tag_len == 32` and a constant-time compare. The 0Bu departure does not apply to the product. Keep 32 bytes. Do not adopt the prefix. This flash point has already been corrected by v4-pro. Later work follows v4-pro and this adjudication.
 
-P04 到 P11 能在主机和云端完成的，都先做完并独审，不为其中任何一档单独叫用户刷机。若形成新的独审镜像，再安排下一次集中测试，把需要真机的部分一次做完：
+### R5. Writing the product window width 64 as the official value, or writing "this round must change it to 32" as scope already under repair
 
-- **P12** 测运行、空闲、休眠功耗基线。无仪表不编造续航。
-- **P13** 优化显示刷新、背光与熄屏；代码独审后，在同一次测试里复测响应与功耗。
-- **P14** 优化 BLE 窗口、重试、唤醒与休眠恢复。空闲断开若作为产品策略，也在这次测量后决定。不以失联或误触换功耗。
-- **P15** 官方云端主导异常、存储故障、断连、反复唤醒与耐久回归；真机补证并入同一次测试。
-- **P16** 对精确基础版候选做官方终审，并补 IDF、归档与真机证据。主机、固件、设备结果分开。
-- **P17** 总管做基础版正式固件开发完成裁决，交付可追溯固件、匹配 ELF、说明、回退、功耗测量条件与未测项。未满足正式门禁，不得把候选叫做正式完成。不自动公开发布。基础版完成后再做 Pro。
+Where it appears: a comment in the product header; some transcriptions do not distinguish "official value" from "this round's fix scope." v4-pro correctly identified the origin and the comment error.
 
-纪律不变：规范以官方固定提交的原文为准，云审计和三方报告都可以被订正，但订正必须引用活对象路径与行号。一次只做一件边界清楚的事。C 类定时器和连接策略不进实现提示词，除非已经明确写成产品决定。未授权不刷机，不动 `main` 和 `feature/tesla-key`。
+Partly accepted, and not accepted as scope: official is 32. 64 is a wider departure. The comment must be changed. A security review then decides whether to narrow. This is not one of the current three fixes. Do not use this round to change the window width, and do not keep writing 64 as official `window.go`.
+
+### R6. Writing NVS dual-page rotation, CRC32, and "forbid Safe Mode" as interaction specification that must land immediately
+
+Where it appears: cite-style long report 2.3.
+
+Not accepted as protocol specification: this is a 0Bu / ESP32 storage-layer pitfall, not a `vehicle-command` session rule. The product session is currently RAM-only and re-handshakes on every connection, so the three official recovery conditions for cache aging do not apply. The storage layer may later refer to dual pages and checksums. That does not enter this round's interaction fix, must not be labeled A, and must not require the NVS plan to be changed now.
+
+### R7. Automatically resending a state-changing command on timeout, BUSY, or `INVALID_TOKEN_OR_COUNTER`
+
+Where it appears: the "automatic recovery policy" in cite-style long report 1.6, for example reconnecting after TIMEOUT, or resending after updating the counter on `INVALID_TOKEN_OR_COUNTER`.
+
+The blanket automatic resend is not accepted. Official A29 states that when no reply is received the actuator may already have executed, so a timeout must not be treated as a clean failure and a state-changing command must not be automatically resent. Session-desync faults may, under A28, after the A6 session update is complete, be signed again with a new command counter. That is not the same thing as sending once more, because of a timeout, an actuation that may already have executed. Pairing failure and insufficient privilege should stop, not retry.
+
+### R8. Writing timers such as 7 s, 660 s, 5 s, 15 s, and 30 s as official specification
+
+Where it appears: several third-party summaries place field timers next to the official BLE 1 s / 4 s; the cite report's 15 s disconnect; local-control / yoziru's 660 s; section 5.1 of the Word read-only checklist writes "completely disable background timed polling" as a baseline that can be adopted directly.
+
+Not accepted as A. The timers with an official basis are mainly the BLE chunk timeout of 1 s, the official BLE client's session-info age of 4 s, and the maximum frame of 1024. The 7 s wake settle, the 660 s sleep-poll floor, the 5 s command budget, and the 15 s disconnect are Class C or Class B product or third-party policy. They may be referenced and must not be labeled official.
+
+### R9. Treating the Antigravity first draft as an already comprehensive interaction-specification checklist
+
+Where it appears: AG's first delivery, `tesla_interaction_spec_checklist.md`.
+
+Not accepted as a complete checklist: the draft lacks a standalone chapter of third-party pitfalls already hit, and it does not write "a domain-shared window treats a new request's counter 0 as a replay" as a check that must be avoided again. The hardware H items remain a hardware contract, not the vehicle protocol. After that draft, the official cloud checklist is the base, and this Part 3 collects later research reports.
+
+### R10. Relying on an expired or remembered ADR-0003 to say the current 0Bu specification is "reject counter 0"
+
+Where it appears: expired retellings after the project started. Official checklist P9 already notes that ADR-0003 has been superseded.
+
+Not accepted: the current ADR-0005 does not write "reject counter 0." It writes that the window after successful authentication includes counter 0, and that a repeat, including a repeated 0, is dropped. Do not use the superseded text again.
+
+### R11. Writing practices that are stricter than official as official requirements
+
+Where it appears: the cite report and some transcriptions write a mandatory 16-byte routing address, a mandatory disconnect at the end of a command, a persistent-counter scheme, and similar items as A.
+
+The promotion is not accepted. The product may be stricter. A mandatory routing address with an optional UUID is compatible with the official VCSEC empty UUID, and that is an acceptable product choice. Do not write back "official requires the UUID to be present" or "official requires disconnect when finished." What official requires is Part 1.
+
+### R12. Using a Google transcription link and "[cite: N]" in place of a line-number anchor, and labeling a transcription conclusion A directly
+
+Where it appears: the whole cite-style long report.
+
+That citation form is not accepted as a basis for verification. Rules in it that agree with the official original text may be kept, but verification must return to paths and line numbers on the live `vehicle-command` object: this file's Part 1, and the v4-pro items that carry line numbers. Where the transcription adds, promotes, or omits, this not-accepted table wins.
+
+### R13. Writing "connect briefly on demand, disconnect when finished" and a mandatory disconnect after each BLE step as an official baseline that can be landed directly
+
+Where it appears: Word read-only checklist BLE-04, P-08, and item 2 of section 5.1.
+
+Not accepted as an official obligation. Same as R3. At most about 3 concurrent BLE connections on the vehicle is an official fact. After an iPad or similar device fills the slots, the symptom is "cannot wake," and a hung low-level connection needs a hard timeout. Those are Class B lessons from that report and from tesla_ble_mqtt_docker / TeslaBleHttpProxy, and they may be recorded. Official text does not require a key to disconnect after every action, and it does not specify an idle-disconnect number of seconds. That report itself, in 5.2, also lists idle-disconnect duration as Class C pending real-car calibration. Passport keeping the connection can be a product policy. This round does not change connection policy.
+
+### R14. Because this report did not read `session.go` / `ble.go`, demoting the official window width 32 or the 1024-byte maximum frame back to "still pending re-check"
+
+Where it appears: the opening boundary of the Word read-only checklist, WIN-04, CNF-03, and 5.2; and that report writing `internal/dispatcher/session.go:43-53` as "the precise windowSize = 32 and the sliding-window implementation."
+
+The demotion is not accepted, and the line numbers are corrected. On 2026-11-25 23:50 the coordinator personally checked `0a582da` and the earlier `a4b43c1`. `windowSize = 32` is line 21 of `internal/authentication/crypto.go`. The comment states that `Verifier.windowSize` is `uint64`, so the width must be at most 64. The algorithm is in `internal/authentication/window.go`. Per-request use is `session.decrypt` calling `handler.antireplay.Update`. In both of those commits, `session.go:43-53` is the start of `newSession` / `decrypt`, not the window constant and not the sliding-window implementation. Do not use this unread boundary, or the wrong line numbers, to deny an official value that has already been checked. This round still does not change the product window width of 64.
+
+### R15. Because the product repository could not be read at the time, treating "the gap between `1377473` and the specification has not been checked" as a question that is still open for us
+
+Where it appears: the opening of the Word read-only checklist, and the first item of 5.2.
+
+Not accepted as the current state. That report truly did not read the product code, so it cannot conclude about the C implementation of `1377473`. On our side there is already a first unique review that passed ([bc-e5fb9eb2](https://cursor.com/agents/bc-e5fb9eb2-8183-58be-bf29-93cd3379d170)) and a re-review against this checklist that failed ([bc-d18ff0ed](https://cursor.com/agents/bc-d18ff0ed-5706-54e9-8317-e91b47fc82dc)). The current gap is "Product gap and fix scope for this round" in this file. Do not use "repository not accessible" to say the three fixes have not yet been compared.
+
+### R16. Treating all of section 5.1, "verified, may be adopted directly, may be coded directly," as a merge gate
+
+Where it appears: section 5.1 of the Word read-only checklist. The exported text of that section also contains damaged `[cite:]` markers. Section 5.2 writes an over-long TTL as Fault 209.
+
+The force of that whole section is not accepted. Items that agree with official have already been accepted separately. The mixed-in "disconnect when finished" and "completely disable background timed polling" must not be official gates. See R13, R2, and R8. Verification must still return to repository paths and the line numbers in Part 1 of this file, not to end-of-document numbers or damaged cite markers. The official enum for an over-long TTL is `TIME_TO_LIVE_TOO_LONG` (20). 209 is a slip of the pen and must not be treated as a new fault code.
+
+### R17. Writing "official `ble.go` does not initiate an ATT MTU exchange by default" as official behavior
+
+Where it appears: the Word read-only checklist's still-to-verify item about ESP32-C3 NimBLE / MTU. Its basis is close to 0Bu ADR-0005's retelling of an earlier official client, and it names `ble.go` around line 349.
+
+Not accepted. At the authority commit `0a582da`, and at `a4b43c1`, which that report suggested re-checking, lines 349-357 of `pkg/connector/ble/ble.go` are `ExchangeMTU(maxBLEMTUSize)` immediately after subscribing to RX. On failure, fall back to `ble.DefaultMTU - 3`. On success, `min(txMtu, 1024) - 3`. The first official cloud audit recorded write-with-response, 1024, and the 1 s fragment timeout, and missed this passage. That is a gap in that audit, not "official does not exchange MTU." 247 is still not a `protocol.md` obligation, and the maximum frame must not be raised to 2048. Whether the product already does this is a later comparison and is not part of this round's three-item fix.
+
+## 3.3 Corrections of DeepSeek flash relative to v4-pro (accept v4-pro)
+
+If only the flash edition is seen later, the following follow v4-pro and this adjudication:
+
+1. The product SessionInfo HMAC is already a full 32-byte constant-time compare. Flash did not check the product tag length.
+2. The origin of the 64-wide window is yoziru, not official.
+3. The product rejects a same-epoch `clock_time` rollback. RNG failure is fail-closed. The `UINT32_MAX` guard corresponds to the official signer.
+4. `PK_SESSION_CHALLENGE_MS=4000` aligns with the official 4 s. The departure is 0Bu, not the product.
+5. The core conclusions are unchanged, but status-page wake must not be carried out as v4-pro / flash's "Class C product policy, acceptable." See R1.
+
+## 3.4 Things not to do (for later agents)
+
+- Do not replace an official unique review with a third-party report, and do not replace an official code unique review of a specific commit with this file. The first cloud audit may be corrected, but a correction must return to the official original text. Another third-party report must not overwrite it directly.
+- Do not write the not-accepted conclusions of R1-R17 back into implementation prompts as new features to build.
+- In this round, do not change the window width, the domain-window fallback, the NVS plan, or disconnect-at-end-of-command, do not force MTU 247, and do not bring in the yoziru runtime.
+- Do not deny that official window width 32 has already been verified because some report did not read `session.go`, or because it cited the wrong `session.go:43-53`.
+- Do not write "official does not exchange MTU" into the specification again. The official client exchanges MTU after subscribe and falls back to the default ATT only on failure.
+- Do not change `main` or `feature/tesla-key`, and do not flash, unless the user separately and explicitly authorizes it.
+
+---
+
+# Coordinator judgment and development principles (2026-11-25 23:50 CST)
+
+After reading all the research materials, and personally checking official `protocol.md`, `internal/authentication/crypto.go` / `window.go`, `internal/dispatcher/session.go`, `pkg/connector/ble/ble.go`, and `signer.go`, I conclude as follows.
+
+The first official cloud audit ([bc-d7db7c3b](https://cursor.com/agents/bc-d7db7c3b-b1b8-52a7-b6cc-5471aee508be)) is right on the core judgments. That is not "right because an official run started it." The original text supports it: two domains and two sessions; the command counter and the response counter are not the same set; response anti-replay is per the same request, the first counter, including 0, must be accepted, and reuse on the same request must be rejected; the official window width is 32; VCSEC sends only one request at a time and at most about three replies; a missing reply may already have executed, and the actuation must not be automatically resent; VCSEC can still be reached over BLE while Infotainment is asleep; wake must be explicit, and there must be no implicit wake in order to read status; `GET_STATUS` may be unauthenticated; an omitted proto3 lock state must not be shown as unlocked; the vehicle has only about 3 BLE connection slots. I still accept the FAIL of the checklist re-review of `1377473` ([bc-d18ff0ed](https://cursor.com/agents/bc-d18ff0ed-5706-54e9-8317-e91b47fc82dc)): clearing a known lock state on timeout, implicitly waking when the status page is opened, and displaying an omitted lock state are the three items to fix now. I do not accept DeepSeek downgrading status-page wake to "an acceptable product policy."
+
+It is also not complete. Some places in `protocol.md` are vague. For example, `TAG_COUNTER` in the response AAD is written as "initially session_info.counter." The implementation must use `AES_GCM_Response_data.counter`, and it must pass GCM before updating the window. Official source is the final basis in those places. The first cloud audit missed that official `ble.go` calls `ExchangeMTU` after subscribe and falls back to the default ATT on failure. Several third-party reports record real pitfalls, but they often promote product policy, a superseded ADR, a wrong line number, or source they did not read into official specification. I recorded those and rejected them, so they are not argued again later.
+
+How to understand the interaction specification, and how this Bluetooth key should be developed: what we are building is a key in a pocket, not a vehicle-status poller and not a charging manager. The protocol layer does only what official specifies: a session per domain, anti-replay per request, honest actuation, honest status, and a restrained wake. While the car is asleep, use VCSEC to read and write locks and closures. Do not pull Infotainment up just to glance at status. If lock was pressed and there is temporarily no reply, admit that it may already have executed. Do not clear a lock state that is already known, and do not automatically send it again. A field that did not appear is unknown. It is not "unlocked by default" or "closed by default." The link layer follows the official client: write-with-response, 1024, a 1-second fragment timeout, and an MTU exchange attempted after subscribe, with fallback allowed. Do not write 247, disconnect-when-finished, or a 7-second or 15-second timer as a Tesla rule. Third-party repositories are used only to avoid pits others have already hit. They are not the specification, and their roles or polling habits are not copied in. The product may be stricter than official, but a stricter choice must not be described as an official requirement. The hardware is an ESP32-C3 with no PSRAM. Keep the session layer thin. Buttons and power consumption yield to getting it right first, and then making it frugal.
+
+# Follow-up research plan (by P00-P17, and by concentrated testing, 2026-11-25 23:58 CST)
+
+The formal goal of the baseline edition is still P00 through P17. P03 is the adjudication of the common baseline, not the finish. P17 is the adjudication that formal firmware development is complete. A candidate that has not passed the formal gate cannot be called formal baseline firmware. Protocol research and fixes join this cadence. They do not open a parallel track.
+
+Hard order: refuse testing once per update. Before any flash, finish every code change and official unique review that can be done without flashing. Do not ask the user, in the middle of the work, to flash and verify a single fix. The user flashes and tests only after authorization, and does both in one concentrated pass.
+
+## 1. Before flashing: finish everything that can be done
+
+This order does not expand the three fixes now in progress: do not clear a known lock state on timeout, do not implicitly wake on the status page, and do not show an omitted lock state as unlocked. Finish these three first, with an independent check and an official unique review.
+
+After the three pass, continue on the same candidate with protocol alignment that does not depend on a real vehicle. Still one item at a time, unique review before the change, and none of them needs to go on the car first:
+
+- Correct the comment that writes window 64 as official `window.go`, and separately review whether to narrow it to the official 32
+- Verify that every signed request has registered its request identity, so the path does not fall through to the domain window
+- Check the FLAG mask, that response AAD uses the response counter, that GCM precedes the window update, and that unmatched 31/41-byte authentication frames are dropped
+- Check that the pairing role is not Charging Manager
+- Compare, and on the code side align with the official client: `ExchangeMTU` after subscribe, fallback to the default ATT on failure, plus write-with-response, 1024, and a 1-second fragment timeout
+
+Only after all of the above have passed official unique review is one authorized flash requested. Until then, do not flash. The device stays as it is.
+
+## 2. After authorization, concentrate the test into one pass
+
+Complete these in the same image and the same test. Do not split them into multiple flashes:
+
+- **P00**: For that exact object, collect device-identity evidence such as the image checksum, boot version, and ELF prefix. A P00 record of an older object is not inherited automatically.
+- **P01**: Reading the hardware guide has already been delivered. Keep it only as an applicable gate. Do not schedule a separate test for it.
+- **P02**: Real-device boot, screen and three buttons, BLE initialization, storage and reboot; also unplug USB, 30-second screen-off, range deep sleep, first-key wake only, and settings retention. What was not observed is not written as PASS.
+- On-car regression: lock, unlock, front trunk, rear trunk; opening the status page on a sleeping car does not wake; a missing reply still keeps the known lock state; a missing field is not shown as unlocked.
+- Items observable on the same real-car pass: do not handshake Infotainment immediately after wake (issue 366); whether connection slots are stuck occupied; whether the charge port during sleep is an old latch (issue 368). Observe first, then decide product policy. Do not write them down as official obligations in advance.
+
+Host probes and the limited P00 evidence on `47fd967` cannot be used directly as P03 or P16 evidence for a later commit.
+
+## 3. After the concentrated test passes, advance by P level
+
+- **P03** The coordinator adjudicates the common baseline from the official unique review, the build, and this concentrated-test evidence for that exact object. Do not enter P04 without passing the gate.
+- **P04** From the accepted common baseline, freeze the baseline entry, buttons, feedback, disabled states, and the acceptance checklist. Do not start over with a new UI.
+- **P05** Branch an independent baseline-edition branch from the accepted baseline. Do not overwrite existing unique results. Do not change `main`.
+- **P06** Converge the baseline build configuration, modules, and background tasks. A change enters its dependents only after an official unique review.
+- **P07** Three-button navigation, and selection and switching among at most three cars.
+- **P08** The necessary pairing guidance, capacity, delete confirmation, and exception screens. Verify by simulation. If real-car pairing is required, fold it into the next concentrated test. Do not flash for it alone.
+- **P09** Connect the four action entries and their feedback: unlock, lock, front trunk, and rear trunk.
+- **P10** Official cloud unique review of mis-touch, repeated intent, the park condition, timeout, an unknown result, and no automatic resend. A contract of the same kind that was already fixed and uniquely reviewed before the flash must still formally pass the gate on the exact object of the baseline branch. One unique review of the fix candidate does not stand in for that.
+- **P11** The state machine for running, idle, connected, sleep, and button wake. Do the code and the official unique review first.
+
+Whatever in P04 through P11 can be finished on the host and in the cloud is finished and uniquely reviewed first. Do not ask the user to flash for any single one of those levels. If a new unique-review image is produced, schedule the next concentrated test and finish, in one pass, the parts that need a real device:
+
+- **P12** Measure the running, idle, and sleep power baselines. Do not invent a range figure without an instrument.
+- **P13** Optimize display refresh, backlight, and screen-off. After the code unique review, re-measure response and power in the same test.
+- **P14** Optimize the BLE window, retry, wake, and sleep recovery. If idle disconnect is a product policy, decide it after this measurement. Do not trade a lost link or a mis-touch for lower power.
+- **P15** Official-cloud-led regression of exceptions, storage faults, disconnects, repeated wakes, and endurance. Real-device supplementary evidence is folded into the same test.
+- **P16** Official final review of the exact baseline candidate, plus IDF, the archive, and real-device evidence. Keep host, firmware, and device results separate.
+- **P17** The coordinator adjudicates that formal baseline firmware development is complete, and delivers traceable firmware, a matching ELF, instructions, rollback, the power-measurement conditions, and the untested items. If the formal gate is not met, the candidate must not be called formally complete. Do not publish automatically. Pro comes after the baseline is complete.
+
+Discipline is unchanged. The specification is the original text of the pinned official commit. A cloud audit and a third-party report may both be corrected, but a correction must cite the live-object path and line numbers. Do one thing at a time, with a clear boundary. Class C timers and connection policy do not enter an implementation prompt unless they have already been written down as an explicit product decision. Do not flash without authorization. Do not move `main` or `feature/tesla-key`.
