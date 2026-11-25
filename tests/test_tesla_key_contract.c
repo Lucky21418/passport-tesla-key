@@ -3393,6 +3393,29 @@ static void test_command_observation_decoupling(void)
                pk_session_rx_window(&sctx, PK_PROTO_DOMAIN_INFOTAINMENT) != NULL,
                "decouple: session exposes per-domain rx_window");
     }
+
+    /* 6. Connected, unparked, unknown lock state with PK_MSG_RECONNECTED:
+     * primary is PK_ACTION_VCSEC_GET_STATUS_ONCE and main subtitle never tells
+     * the user to lock the car. */
+    {
+        const char *sub;
+        setup_connected_main_for_keys(&app, &ad, &btn);
+        app.message = PK_MSG_RECONNECTED;
+        app.vcsec_status_valid = false;
+        app.vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
+        app.has_grant = false;
+        expect(app.connected && !pk_app_parked(&app) &&
+               pk_app_primary(&app) == PK_ACTION_VCSEC_GET_STATUS_ONCE,
+               "decouple: connected unparked unknown-lock primary is read-only query");
+        sub = pk_copy_unknown_lock_subtitle(app.message);
+        expect(sub && strstr(sub, "查锁态") != NULL &&
+               strstr(sub, "锁车") == NULL && strstr(sub, "闭锁") == NULL,
+               "decouple: PK_MSG_RECONNECTED subtitle prompts lock-status check, never lock");
+        sub = pk_copy(PK_MSG_RECONNECTED);
+        expect(sub && strstr(sub, "查锁态") != NULL &&
+               strstr(sub, "锁车") == NULL && strstr(sub, "闭锁") == NULL,
+               "decouple: PK_MSG_RECONNECTED copy itself never prompts lock");
+    }
 }
 
 int main(void)

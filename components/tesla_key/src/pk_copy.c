@@ -89,7 +89,7 @@ static const char *const k_copy[PK_MSG_COUNT] = {
     [PK_MSG_ALREADY_CONNECTED] = "已连接，可正常控车",
     [PK_MSG_RECONNECT_RUNNING] = "正在重连车辆，请等待",
     [PK_MSG_RECONNECT_NO_REPLAY] = "重连中，不会补发旧指令",
-    [PK_MSG_RECONNECTED] = "已连上车，按●锁车或双击查状态",
+    [PK_MSG_RECONNECTED] = "已连上车，按●查锁态或双击查状态",
     [PK_MSG_RECONNECT_STOPPED] = "暂未连上车，按●重连",
     [PK_MSG_RECONNECT_CANCELED] = "已停止重连，不补发",
     [PK_MSG_LOW_BATT] = "本机电量低，请充电，仍可锁车／开锁／启动",
@@ -123,6 +123,15 @@ const char *pk_copy(pk_msg_id_t id)
         return "";
     }
     return k_copy[id];
+}
+
+const char *pk_copy_unknown_lock_subtitle(pk_msg_id_t id)
+{
+    const char *msg = pk_copy(id);
+    if (!msg || !msg[0] || strstr(msg, "锁车") || strstr(msg, "闭锁")) {
+        return "单击●查锁态 · 双击●状态";
+    }
+    return msg;
 }
 
 bool pk_msg_is_failure(pk_msg_id_t id)

@@ -113,6 +113,7 @@ typedef enum {
 } pk_msg_id_t;
 
 const char *pk_copy(pk_msg_id_t id);
+const char *pk_copy_unknown_lock_subtitle(pk_msg_id_t id);
 
 /* Single feedback classification for the red failure presentation. */
 bool pk_msg_is_failure(pk_msg_id_t id);

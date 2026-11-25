@@ -61,7 +61,16 @@ class KeyWakeGuardWiringTest(unittest.TestCase):
         branch = branch[:branch.index("} else {")]
         self.assertIn("锁态未确认", branch)
         self.assertIn("查锁态", branch)
+        self.assertIn("pk_copy_unknown_lock_subtitle(app->message)", branch)
         self.assertNotIn("闭锁", branch)
+        self.assertNotIn("锁车", branch)
+
+        copy_src = read("components/tesla_key/src/pk_copy.c")
+        m = re.search(r'\[PK_MSG_RECONNECTED\]\s*=\s*"([^"]+)"', copy_src)
+        self.assertIsNotNone(m)
+        self.assertIn("查锁态", m.group(1))
+        self.assertNotIn("锁车", m.group(1))
+        self.assertNotIn("闭锁", m.group(1))
 
 
 if __name__ == "__main__":

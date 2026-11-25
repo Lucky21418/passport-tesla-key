@@ -201,7 +201,7 @@ void app_ui_render_page_main(lv_obj_t *body, const pk_app_t *app)
         } else if (prim == PK_ACTION_VCSEC_GET_STATUS_ONCE) {
             gico = APP_ICON_TESLA_CAR;
             gtitle = "锁态未确认";
-            gsub = (msg && msg[0]) ? msg : "单击●查锁态 · 双击●状态";
+            gsub = pk_copy_unknown_lock_subtitle(app->message);
             build_glance_card(body, y, 66, gico, false, gtitle, gsub);
             y += 71;
             build_zone_card(body, y, zh, false, false, false, "前备箱", NULL, side_hint);
