@@ -4,7 +4,9 @@
 
 增补：2026-11-25 23:30 CST。收入用户再交的 Word《车机交互规范只读核实清单（对照立项五个参考仓库）》。官方 Part 1 / Part 2 仍不改写；新增条目写入材料来源与 Part 3。本轮三项修复不扩大。
 
-权威顺序：`teslamotors/vehicle-command` @ `0a582da430c4aca6d397fb6cbed5b4d6bb380125`，以及官方云端清单（[bc-d7db7c3b](https://cursor.com/agents/bc-d7db7c3b-b1b8-52a7-b6cc-5471aee508be)）为 A。三方研究报告是参考与已踩坑记录，冲突以官方为准。本文件不替代官方代码独审。
+再裁决：2026-11-25 23:50 CST。总管按全部研究材料，并亲自对照 `teslamotors/vehicle-command` @ `0a582da430c4aca6d397fb6cbed5b4d6bb380125`（兼核更早的 `a4b43c1`）原文重判，不默认第一次官方云审计必然正确。会话、计数器、按请求窗口、显式唤醒、无回包不得当失败、省略锁态不得显示未闭锁，这些核心结论经原文复核仍然成立。第一次云审计漏记了官方客户端在订阅后 `ExchangeMTU`（失败回退默认 ATT）；Word 报告「官方不交换 MTU」以及把 `session.go:43-53` 当成窗口实现，均与该活对象不符。五点 README 约束不改。本轮三项修复不扩大。
+
+权威顺序：以 `teslamotors/vehicle-command` @ `0a582da430c4aca6d397fb6cbed5b4d6bb380125` 的 `protocol.md` 与官方源码为第一权威。官方云端清单（[bc-d7db7c3b](https://cursor.com/agents/bc-d7db7c3b-b1b8-52a7-b6cc-5471aee508be)）是一次有依据的核实，不是不可订正的终审；与官方原文冲突时，以原文为准，并在本文件记下订正。三方研究报告是参考与已踩坑记录，冲突以官方原文为准。本文件不替代对具体提交的官方代码独审。
 
 产品对照节点：`Lucky21418/passport-tesla-key` 候选分支 `cand/d08-dead-code-cleanup` @ `1377473a0170fde55a3eacba6068ef5767adc9d2`。`main`（`e85197d56abe92c35a1cfb84fad85fba2545c9cc`）与 `feature/tesla-key`（`47fd967aaa22d619fce3ffa15a3e97d5bd4ccac2`）未被移动。设备仍为已授权且独审通过的 `a3a5305`。本文件不授权刷机。
 
@@ -370,7 +372,17 @@ https://github.com/teslamotors/vehicle-command/blob/0a582da430c4aca6d397fb6cbed5
 
 SDK: same UUIDs and `VehicleLocalName` (`ble.go`, lines 33–36, 133–137). `Send` prefixes the length (`ble.go`, lines 108–116) and calls `WriteCharacteristic(..., false)` (line 121). `flush` rejects a declared length above `maxBLEMessageSize` 1024 (lines 19–21, 67–73). If the next chunk arrives more than `rxTimeout` (1 s) later, the partial buffer is discarded (lines 27–28, 98–101). The 1 s and 1024 limits are official client behavior. They are not sentences in `protocol.md`.
 
-Passport: write-with-response, 2-byte big-endian length, drop a partial frame after 1 s, reject a declared length above 1024.
+Passport: write-with-response, 2-byte big-endian length, drop a partial frame after 1 s, reject a declared length above 1024. After CCCD subscribe, follow A22a for MTU.
+
+### A22a. Official client ATT MTU exchange（总管 2026-11-25 复核补记）
+
+Rule / SDK behavior: after a successful Subscribe on the RX characteristic, the official BLE client calls `client.ExchangeMTU(maxBLEMTUSize)` (`pkg/connector/ble/ble.go`, lines 349–357). On failure it logs a warning and sets `blockLength = ble.DefaultMTU - 3`. On success, `blockLength = min(txMtu, maxBLEMessageSize) - 3`. The RoutableMessage cap remains 1024. This is official client behavior, not a sentence in `protocol.md`, and it is not a requirement to force ATT MTU 247.
+
+Class: **A** (official client), same category as the 1 s partial-frame timeout and the 1024-byte cap in A22.
+
+The first official checklist pass recorded write-with-response, 1024, and 1 s, but did not record this `ExchangeMTU`. The same call is already present at earlier commit `a4b43c1eff0e09d77deb9f2dce97031141fe8c8a`. Third-party text that says “official `ble.go` does not exchange MTU” is false against these objects (see R17).
+
+Passport: after CCCD subscribe, attempt MTU exchange and fall back to the default ATT payload; do not treat 247 as a protocol must; do not raise the 1024 message cap. Aligning product BLE to this official client behavior is a later increment, not part of the current three-item fix.
 
 ## 4. Wake, polling, command versus status
 
@@ -648,6 +660,7 @@ Passport must: one BLE transaction at a time toward a given car, and never two V
 7. Command counter never decreases in `UpdateSessionInfo` versus `force_update_session`. Adopt the official signer.
 8. VCSEC command counters must arrive in order (`protocol.md` line 550) versus one shared verifier window for every domain (`verifier.go` lines 228–233). As a client, send VCSEC commands in order and do not overlap them. The verifier’s window is not permission to reorder.
 9. Response anti-replay is per request (`receiver.antireplay`) versus `Peer::response_window_` plus a reset that the caller must remember (`client.cpp` line 729). Adopt a window that is born with the request.
+10. （2026-11-25 总管复核）Official `ExchangeMTU` after Subscribe, with `DefaultMTU - 3` fallback (`ble.go` lines 349–357 at `0a582da` and `a4b43c1`), versus third-party “official does not exchange MTU.” Adopt the official client. Do not force ATT MTU 247, and do not raise the 1024 message cap.
 
 ---
 
@@ -694,7 +707,7 @@ From official Tesla, with third-party items only where they restate it:
 3. BLE commands are AES-GCM. Set `FLAG_ENCRYPT_RESPONSE` every time. Request AAD omits flags when zero. Response AAD always includes response flags, the response fault, and `AES_GCM_Response_data.counter`.
 4. Request identity is one signature-type byte plus the tag. AES-GCM identities are 17 bytes. Store that identity on the in-flight request.
 5. Response anti-replay is a new 32-deep window per request. The first counter, including 0, is accepted. A repeat on that request, including a second 0, is rejected. Out-of-order replies inside the window are accepted. Older than 32 are rejected. An unmatched reply updates nothing. A missing `AES_GCM_Response_data` is plaintext, not counter 0.
-6. VCSEC may send three replies. One VCSEC request at a time. Empty non-whitelist message means success. `nominalError` means failure. `WAIT` means busy except during NFC pairing. Discard a bare legacy `OPERATIONSTATUS_ERROR` and keep waiting. At most three BLE connections. Write-with-response, 2-byte length, 1 s partial timeout, 1024-byte max, local name `S + hex(SHA1(VIN)[:8]) + C`.
+6. VCSEC may send three replies. One VCSEC request at a time. Empty non-whitelist message means success. `nominalError` means failure. `WAIT` means busy except during NFC pairing. Discard a bare legacy `OPERATIONSTATUS_ERROR` and keep waiting. At most three BLE connections. Write-with-response, 2-byte length, 1 s partial timeout, 1024-byte max, local name `S + hex(SHA1(VIN)[:8]) + C`. After subscribe, the official client exchanges MTU and falls back to the default ATT payload if that fails (A22a); 247 is not a protocol must.
 7. Wake is explicit `RKE_ACTION_WAKE_VEHICLE` or Fleet `wake_up`. VCSEC status is unauthenticated and does not wake. A timer must not wake the car, and must not poll Infotainment, merely to refresh status. A missing reply may mean the actuator ran.
 8. Retry the session-desync faults in A28 after A6, with a new command counter. Do not retry a possibly executed actuator as if the timeout proved failure. Pairing faults and privilege faults stop.
 
@@ -726,7 +739,8 @@ Do not adopt: a domain-level response window, “reject counter 0,” window wid
 | DeepSeek v4-pro 复核（对 flash 逐条重写） | 2026-11-25 | 只读对照，优于 flash | 采信其对 flash 的勘误与产品 HMAC/窗口源头/回绕等核对；不采信状态页唤醒为可接受策略 |
 | Antigravity 详细踩坑清单 `tesla_protocol_and_pitfalls_detailed.md` | 2026-11-25 | 三方已踩坑补充 | 主干与官方一致；额外嵌入式避开项保留为后续，不扩大本轮修复 |
 | cite 风格长报告《车机交互规范与协议核实清单报告》 | 2026-11-25 | 三方综述，引用偏转写 | 主干部分可参考；多处把 B/C 写成 A，见下方不采信表 |
-| Word《车机交互规范只读核实清单（对照立项五个参考仓库）》 | 2026-11-25 23:22 | 三方只读对照（当时读不到产品仓，也未直读 session.go / ble.go） | 主干多数与官方一致，P-01–P-12 可作已踩坑索引；「用完即断」和把窗口 32 / 1024 降为未核实，以及 5.1 整节当编码门禁，见 R13–R16 |
+| Word《车机交互规范只读核实清单（对照立项五个参考仓库）》 | 2026-11-25 23:22 | 三方只读对照（当时读不到产品仓，也未直读 session.go / ble.go） | 主干多数与官方一致，P-01–P-12 可作已踩坑索引；「用完即断」和把窗口 32 / 1024 降为未核实，以及 5.1 整节当编码门禁，见 R13–R16；「官方不交换 MTU」与 `session.go:43-53` 窗口误引，见 R14、R17 |
+| 总管 2026-11-25 23:50 原文再判 | 2026-11-25 23:50 | 总管亲自对照官方活对象，不默认第一次云审计必然正确 | 核心 A 项仍成立；补记 A22a；订正 R14、新增 R17；开发原则与后续研究计划见文末 |
 
 仓库活对象仍以文首 Sources 表为准。`yoziru/tesla-ble` 仅对照，AGPL，不作运行时。
 
@@ -742,7 +756,7 @@ Do not adopt: a domain-level response window, “reject counter 0,” window wid
 2. 打开状态页时，若车已知在休眠，不得先发 `RKE_ACTION_WAKE_VEHICLE`。这是为读状态而做的隐式唤醒，官方复审按 A23 / A24 / A26 判中等 FAIL。
 3. proto3 省略的 `vehicleLockState` 不得显示未闭锁。字段未出现时不得把默认 0 当成已核对的 UNLOCKED。
 
-明确延后、本轮不动：窗口宽度 64 与官方 32 对齐（须改错误注释；是否收窄到 32 另做安全评审）；域窗口回退路径须核实所有签名请求都已 `note_req_id`，但在已识别请求上不应走回退。不刷 `1377473` 及后续未独审修复，除非用户另行明确授权。
+明确延后、本轮不动：窗口宽度 64 与官方 32 对齐（须改错误注释；是否收窄到 32 另做安全评审）；域窗口回退路径须核实所有签名请求都已 `note_req_id`，但在已识别请求上不应走回退；产品 BLE 与官方 A22a（订阅后 `ExchangeMTU`，失败回退）的对照与对齐。不刷 `1377473` 及后续未独审修复，除非用户另行明确授权。
 
 ---
 
@@ -860,9 +874,9 @@ Do not adopt: a domain-level response window, “reject counter 0,” window wid
 
 ### R14. 因为这份报告没读到 `session.go` / `ble.go`，就把官方窗口宽度 32 或最大帧 1024 B 降回「仍待复核」
 
-出现位置：Word 只读清单开篇边界、WIN-04、CNF-03、5.2。
+出现位置：Word 只读清单开篇边界、WIN-04、CNF-03、5.2；以及该报告把 `internal/dispatcher/session.go:43-53` 写成「精确 windowSize = 32 与滑窗实现」。
 
-不采信其降级：报告对自己未直读的源码保持谨慎是对的，但本文件 Part 1 已由官方云端按 `vehicle-command` 活对象把窗口宽度 32 记为 A；1024 B 也已在官方对照中对齐。不得用这份未读到的边界，否定已经核过的官方值。本轮仍然不改产品窗口宽度 64。
+不采信其降级，并订正其行号：2026-11-25 23:50 总管亲自核对 `0a582da` 与更早的 `a4b43c1`。`windowSize = 32` 在 `internal/authentication/crypto.go` 第 21 行（注释写明 `Verifier.windowSize` 是 `uint64`，故宽度必须 ≤ 64）；算法在 `internal/authentication/window.go`；按请求使用发生在 `session.decrypt` 对 `handler.antireplay.Update`。这两个提交里，`session.go:43-53` 是 `newSession` / `decrypt` 开头，不是窗口常量或滑窗实现。不得用这份未读到的边界或错误行号，否定已经核过的官方值。本轮仍然不改产品窗口宽度 64。
 
 ### R15. 因为当时读不到产品仓，就把「`1377473` 尚未核对与规范的差距」当成对我们仍然开放的未知
 
@@ -876,6 +890,12 @@ Do not adopt: a domain-level response window, “reject counter 0,” window wid
 
 不采信其整节效力：与官方一致的条目已经分别采信。混入的「用完断开」「彻底禁用后台定时轮询」不得当官方门禁，见 R13、R2、R8。核验仍须回到仓库路径与本文件 Part 1 的行号，不能靠文末编号或损坏的 cite 标记。过长 TTL 对应的官方枚举是 `TIME_TO_LIVE_TOO_LONG`（20），209 是笔误，不得当新的故障码。
 
+### R17. 把「官方 `ble.go` 默认不发起 ATT MTU 交换」写成官方行为
+
+出现位置：Word 只读清单关于 ESP32-C3 NimBLE / MTU 的待核实项；其依据接近 0Bu ADR-0005 对更早官方客户端的转述，并点名 `ble.go` 约第 349 行。
+
+不采信：在权威提交 `0a582da`，以及该报告建议复核的 `a4b43c1`，`pkg/connector/ble/ble.go` 第 349–357 行都是订阅 RX 之后立刻 `ExchangeMTU(maxBLEMTUSize)`，失败则回退 `ble.DefaultMTU - 3`，成功则 `min(txMtu, 1024) - 3`。第一次官方云审计记下了 write-with-response、1024 与 1 s 分片超时，但漏记了这一段，这是该次审计的缺口，不是「官方不交换 MTU」。247 仍不是 `protocol.md` 义务，也不得把最大帧抬到 2048。产品是否已经这样做，放到后续对照，不纳入本轮三项修复。
+
 ## 3.3 DeepSeek flash 相对 v4-pro 的勘误（采信 v4-pro）
 
 以后若只看到 flash 版，以下以 v4-pro 及本裁决为准：
@@ -888,8 +908,33 @@ Do not adopt: a domain-level response window, “reject counter 0,” window wid
 
 ## 3.4 不要做的事（给后续智能体）
 
-- 不要用三方报告替换官方独审，也不要用本文件替换对具体提交的官方代码复审。
-- 不要把 R1–R16 的不采信结论再写回实现提示词，当作要做的新功能。
-- 不要在本轮修改窗口宽度、域窗口回退、NVS 方案、命令结束断连，或引入 yoziru 运行时。
-- 不要因为某份报告没读到 `session.go`，就否定官方窗口宽度 32 已经核实。
+- 不要用三方报告替换官方独审，也不要用本文件替换对具体提交的官方代码独审。第一次云审计可以订正，但订正必须回到官方原文，不能用另一份三方报告直接覆盖。
+- 不要把 R1–R17 的不采信结论再写回实现提示词，当作要做的新功能。
+- 不要在本轮修改窗口宽度、域窗口回退、NVS 方案、命令结束断连、强制 MTU 247，或引入 yoziru 运行时。
+- 不要因为某份报告没读到 `session.go`，或引用了错误的 `session.go:43-53`，就否定官方窗口宽度 32 已经核实。
+- 不要再把「官方不交换 MTU」写进规范；官方客户端在订阅后会交换，失败才回退默认 ATT。
 - 不要改 `main` 或 `feature/tesla-key`，不要刷机，除非用户另行明确授权。
+
+---
+
+# 总管判断与开发原则（2026-11-25 23:50 CST）
+
+我按全部研究材料，并亲自核对官方 `protocol.md`、`internal/authentication/crypto.go` / `window.go`、`internal/dispatcher/session.go`、`pkg/connector/ble/ble.go` 和 `signer.go` 后，结论如下。
+
+第一次官方云审计（[bc-d7db7c3b](https://cursor.com/agents/bc-d7db7c3b-b1b8-52a7-b6cc-5471aee508be)）在核心判断上是对的，不是“因为官方发起就对”，而是原文支持它：两个域两套会话；命令计数器与响应计数器不是同一套；响应防重放按同一条请求，第一个 counter（包括 0）必须接受，同一请求上复用必须拒绝；官方窗口宽度是 32；VCSEC 同时只发一条、最多约三个回包，无回包可能已经执行，不得自动补发作动；VCSEC 在 Infotainment 休眠时仍可经 BLE 到达，唤醒必须显式，不得为读状态隐式唤醒；`GET_STATUS` 可以无认证；proto3 省略的锁态不得显示未闭锁；车端大约只有 3 个 BLE 连接槽。对 `1377473` 按清单复审的 FAIL（[bc-d18ff0ed](https://cursor.com/agents/bc-d18ff0ed-5706-54e9-8317-e91b47fc82dc)）我仍然接受：超时清掉已知锁态、打开状态页隐式唤醒，加上省略锁态显示，就是当前要修的三项。DeepSeek 把状态页唤醒降成「可接受的产品策略」，我不接受。
+
+它也不是完整无缺。`protocol.md` 有的地方写得含糊，例如响应 AAD 的 `TAG_COUNTER` 写着 “initially session_info.counter”，实现上必须用 `AES_GCM_Response_data.counter`，并且先通过 GCM 再更新窗口；官方源码才是这些地方的最终依据。第一次云审计漏记了官方 `ble.go` 在订阅后 `ExchangeMTU`、失败回退默认 ATT。若干三方报告有真实踩坑，但常把产品策略、过期 ADR、错误行号或没读到的源码升格成官方规范。这些我记下并驳回，免得以后再论证一遍。
+
+交互规范的理解，以及这把蓝牙钥匙该怎么开发：我们要做的是口袋里的钥匙，不是车况轮询器，也不是充电管理器。协议层只做官方规定的事——按域建会话，按请求防重放，作动诚实，状态诚实，唤醒克制。车在睡觉时，用 VCSEC 读写锁和开闭，不要为了看一眼状态就把信息娱乐系统拉起来；按了锁却暂时没有回包，就承认可能已经执行，不要清掉已经知道的锁态，更不要自动再发一次。屏幕上没看到的字段就是未知，不是“默认未锁”或“默认关闭”。链路层跟官方客户端走：write-with-response、1024、1 秒分片超时、订阅后尝试 MTU 交换并允许回退，但不把 247、用完即断、7 秒或 15 秒定时写成 Tesla 的规定。第三方仓库只用来避免别人已经踩过的坑，不拿来当规范，也不把它们的角色或轮询习惯抄进来。产品可以比官方更严，但不能把更严的选择说成官方要求。硬件上这是一块没有 PSRAM 的 ESP32-C3，会话层保持薄实现，按键和功耗让位于“先做对，再做省”。
+
+# 后续研究计划
+
+当前三项修复先做完，经独立核对和官方独审，再等明确授权后上车复测。在那之前，不扩大代码范围，不刷机。
+
+1. 代码修复与实车回归（进行中，不扩大）。修完超时不清已知锁态、状态页不隐式唤醒、省略锁态不显示未闭锁。独审通过并授权刷机后，在车上核对：锁/解锁、前盖/后备箱、休眠车打开状态页不唤醒、无回包时界面仍保持已知锁态、缺字段不显示未锁。这一步通过，才谈正式基础版裁决。
+
+2. 与官方客户端对齐的后续单任务（上车回归之后，一次一件，先独审再改）。先改产品里把窗口 64 写成 official `window.go` 的错误注释，再单独评审是否收到 32；核实所有签名请求都已登记请求身份，避免走到域窗口回退；对照产品 BLE 是否已在订阅后交换 MTU 并在失败时回退，同时确认 write-with-response、1024 与 1 秒分片；再核 FLAG 掩码、响应 AAD 使用响应计数器、GCM 先于窗口更新、未匹配的 31/41 字节认证帧是否丢弃，以及配对角色不是 Charging Manager。
+
+3. 必须在实车上才下结论的行为，先测量再决定产品策略，不提前写成官方义务。包括：唤醒后不要立刻与 Infotainment 握手的等待（issue 366）；休眠时充电口状态可能是旧闩锁（issue 368），只影响以后的界面；我们是否会占死车端大约 3 个连接槽，若会，再定空闲断开，但那是产品策略，不是“用完必须断”；以及在家仍待测的拔 USB、30 秒息屏、续航深睡、首钥匙仅唤醒、设置保持。Write Command 若产品误用则按官方改，若已是 write-with-response，只测 ESP32-C3 上的稳定性。
+
+4. 研究纪律。规范以官方固定提交的原文为准，云审计和三方报告都可以被订正，但订正必须引用活对象路径与行号。一次只做一件边界清楚的事。C 类定时器和连接策略不进实现提示词，除非已经把它明确写成产品决定。未授权不刷机，不动 `main` 和 `feature/tesla-key`。
