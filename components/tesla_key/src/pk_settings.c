@@ -356,15 +356,18 @@ static bool toggle_port_setting(pk_app_t *app)
     return pk_app_commit(app, &intent, app->now);
 }
 
-/* Press again to go the other way. The direction comes from the last state the
- * vehicle reported; with no report the old "turn on" behaviour is kept, and the
- * ACK triggers a silent climate readback so the following press knows the true
- * state instead of sending "on" twice. */
+/* Direction must come from a real authenticated vehicle report; never assume
+ * UNKNOWN means "turn on". */
 static bool toggle_climate_setting(pk_app_t *app)
 {
     pk_intent_t intent;
-    pk_cap_t want = (app->caps.climate_on == PK_CAP_YES) ? PK_CAP_NO : PK_CAP_YES;
+    pk_cap_t want;
 
+    if (app->caps.climate_on == PK_CAP_UNKNOWN) {
+        pk_app_set_msg(app, PK_MSG_UNQUALIFIED);
+        return false;
+    }
+    want = (app->caps.climate_on == PK_CAP_YES) ? PK_CAP_NO : PK_CAP_YES;
     app->draft.bool_enabled = want;
     intent = pk_app_make_intent(app, PK_ACTION_CLIMATE_ON);
     intent.bool_enabled = want;
@@ -374,8 +377,13 @@ static bool toggle_climate_setting(pk_app_t *app)
 static bool toggle_defog_setting(pk_app_t *app)
 {
     pk_intent_t intent;
-    pk_cap_t want = (app->caps.preconditioning == PK_CAP_YES) ? PK_CAP_NO : PK_CAP_YES;
+    pk_cap_t want;
 
+    if (app->caps.preconditioning == PK_CAP_UNKNOWN) {
+        pk_app_set_msg(app, PK_MSG_UNQUALIFIED);
+        return false;
+    }
+    want = (app->caps.preconditioning == PK_CAP_YES) ? PK_CAP_NO : PK_CAP_YES;
     app->draft.bool_enabled = want;
     intent = pk_app_make_intent(app, PK_ACTION_PRECONDITION_MAX_ON);
     intent.bool_enabled = want;

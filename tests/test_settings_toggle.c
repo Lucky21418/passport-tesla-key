@@ -232,9 +232,9 @@ static void test_climate_unknown_state_still_turns_on(void)
     setup(&app, &ad);
     app.caps.climate_on = PK_CAP_UNKNOWN;
     app.focus = PK_SETTING_CLIMATE;
-    expect(pk_app_activate_setting(&app, PK_SETTING_CLIMATE), "climate: toggle");
-    expect(app.pending.bool_enabled == PK_CAP_YES,
-           "climate: unknown state keeps turn-on behaviour");
+    expect(!pk_app_activate_setting(&app, PK_SETTING_CLIMATE) &&
+           app.message == PK_MSG_UNQUALIFIED && g_writes == 0,
+           "climate: unknown state refused without blind turn-on");
 }
 
 static void test_defrost_press_again_turns_off(void)
@@ -313,10 +313,12 @@ static void test_ack_updates_toggle_direction(void)
     expect(pk_app_activate_setting(&app, PK_SETTING_CLIMATE), "climate: toggle off");
     expect(pk_app_command_result(&app, app.pending.id, PK_CMD_RESULT_ACCEPTED, true),
            "climate: ACK");
-    expect(app.caps.climate_on == PK_CAP_NO, "climate: ACK learns the off state");
+    expect(app.caps.climate_on == PK_CAP_YES,
+           "climate: ACCEPTED does not optimistically flip reported state");
+    app.caps.climate_on = PK_CAP_NO; /* vehicle observation updates reported state */
     expect(pk_app_activate_setting(&app, PK_SETTING_CLIMATE), "climate: toggle back");
     expect(app.pending.bool_enabled == PK_CAP_YES,
-           "climate: next press goes the other way without a readback");
+           "climate: next press follows vehicle-reported state");
 
     setup(&app, &ad);
     app.caps.sentry_known = true;
@@ -324,10 +326,12 @@ static void test_ack_updates_toggle_direction(void)
     expect(pk_app_activate_setting(&app, PK_SETTING_SENTRY), "sentry: enable");
     expect(pk_app_command_result(&app, app.pending.id, PK_CMD_RESULT_ACCEPTED, true),
            "sentry: ACK");
-    expect(app.caps.sentry_armed, "sentry: ACK learns enabled");
+    expect(!app.caps.sentry_armed,
+           "sentry: ACCEPTED does not optimistically flip reported state");
+    app.caps.sentry_armed = true; /* vehicle observation updates reported state */
     expect(pk_app_activate_setting(&app, PK_SETTING_SENTRY), "sentry: disable");
     expect(app.pending.bool_enabled == PK_CAP_NO,
-           "sentry: next press disables without a readback");
+           "sentry: next press follows vehicle-reported state");
 }
 
 static void test_basic_settings_and_car_list_convergence(void)

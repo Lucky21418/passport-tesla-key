@@ -285,6 +285,8 @@ void pk_app_vcsec_status(pk_app_t *app, bool asleep, pk_lock_read_t lock_state)
         return;
     }
     app->vcsec_status_valid = true;
+    app->vcsec_reconcile_attempts = 0u;
+    app->vcsec_reconcile_next_ms = 0u;
     app->vcsec_asleep = asleep;
     app->vcsec_lock_state = lock_state;
     if (app->has_pending && app->pending.action == PK_ACTION_VCSEC_GET_STATUS_ONCE &&
@@ -369,15 +371,20 @@ void pk_app_protocol_fault_ex(pk_app_t *app, int fault, bool from_vcsec, bool au
     pk_arbiter_invalidate(&app->keys);
     app->lock_fsm = PK_LOCK_FSM_IDLE;
     app->result_auto_return = false;
-    if (from_vcsec) {
-        /* The vehicle's lock snapshot is no longer trustworthy. Do not keep a
-         * stale LOCKED/UNLOCKED value that would drive the primary action. */
+    if (from_vcsec &&
+        (!authenticated || pk_proto_fault_needs_resync(fault) ||
+         pk_proto_fault_is_key_error(fault) ||
+         fault == PK_PROTO_FAULT_INSUFFICIENT_PRIVILEGES)) {
+        /* Session/auth/key/epoch trust broke: do not keep a stale lock
+         * snapshot. Transient BUSY/TIMEOUT/INTERNAL preserve known state. */
         app->vcsec_status_valid = false;
         app->vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
         app->vcsec_asleep = false;
         app->vcsec_observed_valid = false;
         app->vcsec_observed_lock_state = PK_LOCK_READ_UNKNOWN;
         app->vcsec_observed_asleep = false;
+        app->vcsec_reconcile_attempts = 0u;
+        app->vcsec_reconcile_next_ms = 0u;
     }
     if (kind == PK_PENDING_STATUS) {
         app->status_phase[0] = '\0';

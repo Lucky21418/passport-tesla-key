@@ -2675,6 +2675,7 @@ static void test_wake_then_and_toggle_ack(void)
     app.page = PK_PAGE_SETTINGS;
     app.vcsec_status_valid = true;
     app.vcsec_asleep = true;
+    app.caps.climate_on = PK_CAP_NO;
 
     g_cap_writes = 0;
     expect(pk_app_activate_setting(&app, PK_SETTING_CLIMATE),
@@ -3261,6 +3262,116 @@ static void test_deep_sleep_wake_guard_ring_replay(void)
            "wake-guard: subsequent release disarms without emitting click");
 }
 
+static void test_command_observation_decoupling(void)
+{
+    pk_app_t app;
+    pk_ble_adapter_t ad;
+    pk_btn_adapter_t btn;
+    pk_intent_t intent;
+
+    /* 1. Fault classification: BUSY / TIMEOUT preserve known vcsec_status_valid;
+     * auth/counter/resync faults invalidate it. */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    pk_app_vcsec_status(&app, false, PK_LOCK_READ_LOCKED);
+    expect(app.vcsec_status_valid && pk_app_primary(&app) == PK_ACTION_UNLOCK,
+           "decouple: initial authenticated LOCKED selects UNLOCK");
+
+    intent = pk_app_make_intent(&app, PK_ACTION_UNLOCK);
+    expect(pk_app_commit(&app, &intent, 1100u), "decouple: UNLOCK commits");
+    pk_app_protocol_fault_ex(&app, PK_PROTO_FAULT_BUSY, true, true);
+    expect(!app.has_pending && !app.busy && app.vcsec_status_valid &&
+           app.vcsec_lock_state == PK_LOCK_READ_LOCKED,
+           "decouple: FAULT_BUSY ends txn but preserves known VCSEC lock state");
+
+    intent = pk_app_make_intent(&app, PK_ACTION_UNLOCK);
+    expect(pk_app_commit(&app, &intent, 1200u), "decouple: UNLOCK commits before counter fault");
+    pk_app_protocol_fault_ex(&app, PK_PROTO_FAULT_INVALID_COUNTER, true, true);
+    expect(!app.vcsec_status_valid && app.vcsec_lock_state == PK_LOCK_READ_UNKNOWN,
+           "decouple: INVALID_COUNTER invalidates VCSEC lock state for resync");
+
+    /* 2. Symmetric UNLOCK timeout: clears stale LOCKED so primary never loops
+     * sending UNLOCK forever. */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    pk_app_vcsec_status(&app, false, PK_LOCK_READ_LOCKED);
+    intent = pk_app_make_intent(&app, PK_ACTION_UNLOCK);
+    expect(pk_app_commit(&app, &intent, 1100u), "decouple: UNLOCK commits for timeout test");
+    pk_app_tick(&app, 1100u + PK_COMMAND_WAIT_MS + 10u);
+    expect(!app.has_pending && !app.vcsec_status_valid &&
+           app.vcsec_lock_state == PK_LOCK_READ_UNKNOWN,
+           "decouple: UNLOCK timeout clears stale LOCKED snapshot symmetrically");
+
+    /* 3. Comfort toggles: refuse UNKNOWN, and ACCEPTED never optimistically
+     * flips caps without a vehicle observation. */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    app.page = PK_PAGE_SETTINGS;
+    app.caps.climate_on = PK_CAP_UNKNOWN;
+    app.caps.preconditioning = PK_CAP_UNKNOWN;
+    app.caps.sentry_known = false;
+    app.caps.port_open = PK_CAP_UNKNOWN;
+    expect(!pk_app_activate_setting(&app, PK_SETTING_CLIMATE) && app.message == PK_MSG_UNQUALIFIED,
+           "decouple: climate refuses UNKNOWN");
+    expect(!pk_app_activate_setting(&app, PK_SETTING_DEFOG) && app.message == PK_MSG_UNQUALIFIED,
+           "decouple: defog refuses UNKNOWN");
+    expect(!pk_app_activate_setting(&app, PK_SETTING_SENTRY) && app.message == PK_MSG_UNQUALIFIED,
+           "decouple: sentry refuses UNKNOWN");
+    expect(!pk_app_activate_setting(&app, PK_SETTING_PORT) && app.message == PK_MSG_UNQUALIFIED,
+           "decouple: port refuses UNKNOWN");
+
+    app.caps.climate_on = PK_CAP_NO;
+    expect(pk_app_activate_setting(&app, PK_SETTING_CLIMATE),
+           "decouple: climate sends when reported NO");
+    expect(pk_app_command_result(&app, app.pending.id, PK_CMD_RESULT_ACCEPTED, true),
+           "decouple: climate ACCEPTED completes txn");
+    expect(app.caps.climate_on == PK_CAP_NO,
+           "decouple: ACCEPTED does not optimistically flip climate_on");
+
+    /* 4. In-flight busy press does not kill observation or send a 2nd command. */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    pk_app_vcsec_status(&app, false, PK_LOCK_READ_LOCKED);
+    g_cap_writes = 0;
+    intent = pk_app_make_intent(&app, PK_ACTION_UNLOCK);
+    expect(pk_app_commit(&app, &intent, 1100u) && g_cap_writes == 1,
+           "decouple: first UNLOCK sent");
+    intent = pk_app_make_intent(&app, PK_ACTION_UNLOCK);
+    expect(!pk_app_commit(&app, &intent, 1200u) && app.message == PK_MSG_BUSY_NO_QUEUE &&
+           g_cap_writes == 1 && app.vcsec_status_valid,
+           "decouple: busy press rejected without killing observation or double-sending");
+
+    /* 5. Session-level rx_window & passive observation track:
+     * pk_session_accept_observation_rx rejects plaintext and resets rx_window
+     * on conn_gen change. */
+    {
+        pk_session_ctx_t sctx;
+        pk_proto_session_t sess;
+        pk_proto_routable_t rmsg;
+        pk_session_obs_in_t obs;
+        uint8_t plain[32];
+        size_t plen = 0;
+        pk_evidence_t ev = PK_EVIDENCE_UNKNOWN;
+        uint8_t dummy[4] = { 1, 2, 3, 4 };
+
+        pk_session_init(&sctx);
+        pk_session_set_conn_gen(&sctx, 7u);
+        memset(&sess, 0, sizeof(sess));
+        sess.valid = true;
+        memset(&rmsg, 0, sizeof(rmsg));
+        rmsg.has_from_domain = true;
+        rmsg.from_domain = PK_PROTO_DOMAIN_VEHICLE_SECURITY;
+        rmsg.has_payload_bytes = true;
+        memcpy(rmsg.payload_bytes, dummy, sizeof(dummy));
+        rmsg.payload_len = sizeof(dummy);
+        obs = (pk_session_obs_in_t){
+            .slot = 0, .conn_gen = 7u, .domain = PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+            .vin = VIN_A, .sess = &sess, .rmsg = &rmsg,
+        };
+        expect(!pk_session_accept_observation_rx(&sctx, &obs, plain, sizeof(plain), &plen, &ev),
+               "decouple: passive observation rejects unauthenticated plaintext");
+        expect(pk_session_rx_window(&sctx, PK_PROTO_DOMAIN_VEHICLE_SECURITY) != NULL &&
+               pk_session_rx_window(&sctx, PK_PROTO_DOMAIN_INFOTAINMENT) != NULL,
+               "decouple: session exposes per-domain rx_window");
+    }
+}
+
 int main(void)
 {
     test_unwired_not_success();
@@ -3313,6 +3424,7 @@ int main(void)
     test_sentry_idle_and_defrost_mode();
     test_double_click_option_e_regressions();
     test_deep_sleep_wake_guard_ring_replay();
+    test_command_observation_decoupling();
     if (g_fail) {
         fprintf(stderr, "%d contract check(s) failed\n", g_fail);
         return 1;

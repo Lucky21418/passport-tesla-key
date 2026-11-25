@@ -423,21 +423,9 @@ bool pk_app_command_result(pk_app_t *app, pk_id_t op_id, pk_cmd_result_t result,
     app->has_pending = false;
     pk_app_set_busy(app, false);
     if (result == PK_CMD_RESULT_ACCEPTED) {
-        /* Optimistic local state: an accepted toggle becomes the new known
-         * state so the next press goes the other way even before a read.
-         * Explicit reads later correct it if the car disagreed. */
-        if (action == PK_ACTION_SET_SENTRY) {
-            app->caps.sentry_known = true;
-            app->caps.sentry_armed = (app->pending.bool_enabled == PK_CAP_YES);
-        } else if (action == PK_ACTION_CLIMATE_ON) {
-            app->caps.climate_on = app->pending.bool_enabled;
-        } else if (action == PK_ACTION_PRECONDITION_MAX_ON) {
-            app->caps.preconditioning = app->pending.bool_enabled;
-        } else if (action == PK_ACTION_CHARGE_PORT_OPEN) {
-            app->caps.port_open = PK_CAP_YES;
-        } else if (action == PK_ACTION_CHARGE_PORT_CLOSE) {
-            app->caps.port_open = PK_CAP_NO;
-        }
+        /* ACCEPTED only means the vehicle accepted the command, NOT that the
+         * actuator has already reached the target state. Reported caps come
+         * strictly from authenticated vehicle observations. */
         pk_app_set_msg(app, PK_MSG_CMD_ACCEPTED);
     } else if (result == PK_CMD_RESULT_REJECTED) {
         pk_app_set_msg(app, PK_MSG_CMD_REJECTED);

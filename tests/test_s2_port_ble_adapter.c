@@ -1011,6 +1011,7 @@ int main(void)
         g_app.vcsec_status_valid = true;
         g_app.vcsec_asleep = true;
         g_app.caps.action[PK_ACTION_CLIMATE_ON] = PK_CAP_YES;
+        g_app.caps.climate_on = PK_CAP_NO;
         (void)pk_app_activate_setting(&g_app, PK_SETTING_CLIMATE);
         pk_ms_t original_total = g_app.pending.deadline;
         g_now_ms = original_total - 1000u;
@@ -1140,6 +1141,7 @@ int main(void)
         g_app.vcsec_status_valid = true;
         g_app.vcsec_asleep = true;
         g_app.caps.action[PK_ACTION_CLIMATE_ON] = PK_CAP_YES;
+        g_app.caps.climate_on = PK_CAP_NO;
         (void)pk_app_activate_setting(&g_app, PK_SETTING_CLIMATE);
         {
             int gatt_before_weak = g_gatt_write_calls;
@@ -1167,6 +1169,7 @@ int main(void)
         g_app.vcsec_status_valid = true;
         g_app.vcsec_asleep = true;
         g_app.caps.action[PK_ACTION_CLIMATE_ON] = PK_CAP_YES;
+        g_app.caps.climate_on = PK_CAP_NO;
         (void)pk_app_activate_setting(&g_app, PK_SETTING_CLIMATE);
         {
             int gatt_before_err = g_gatt_write_calls;
@@ -1285,6 +1288,7 @@ int main(void)
         g_app.page = PK_PAGE_SETTINGS;
         g_app.caps.action[PK_ACTION_CLIMATE_ON] = PK_CAP_YES;
         g_app.caps.climate_on = PK_CAP_NO;
+        g_app.caps.climate_on = PK_CAP_NO;
         (void)pk_app_activate_setting(&g_app, PK_SETTING_CLIMATE);
         memset(&cr, 0, sizeof(cr));
         cr.has_actionStatus = true;
@@ -1363,6 +1367,7 @@ int main(void)
         g_app.vcsec_status_valid = true;
         g_app.vcsec_asleep = true;
         g_app.caps.action[PK_ACTION_CLIMATE_ON] = PK_CAP_YES;
+        g_app.caps.climate_on = PK_CAP_NO;
         (void)pk_app_activate_setting(&g_app, PK_SETTING_CLIMATE);
         int writes_after_wake = g_gatt_write_calls;
         wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,

@@ -33,10 +33,11 @@ typedef struct {
 } pk_session_ref_t;
 
 typedef struct {
-    uint32_t         conn_gen;
-    pk_session_ref_t handshake[PK_SESSION_DOMAIN_COUNT];
-    pk_session_ref_t request[PK_SESSION_DOMAIN_COUNT];        /* last request, any */
-    pk_session_ref_t signed_request[PK_SESSION_DOMAIN_COUNT]; /* last signed request */
+    uint32_t             conn_gen;
+    pk_session_ref_t     handshake[PK_SESSION_DOMAIN_COUNT];
+    pk_session_ref_t     request[PK_SESSION_DOMAIN_COUNT];        /* last request, any */
+    pk_session_ref_t     signed_request[PK_SESSION_DOMAIN_COUNT]; /* last signed request */
+    pk_proto_rx_window_t rx_window[PK_SESSION_DOMAIN_COUNT];      /* session anti-replay (conn_gen + epoch_gen) */
 } pk_session_ctx_t;
 
 typedef struct {
@@ -116,6 +117,29 @@ bool pk_session_accept_rx(const pk_session_ctx_t *ctx,
                           uint8_t *plain_out, size_t plain_cap,
                           size_t *plain_len_out,
                           pk_evidence_t *evidence_out);
+
+/* Return the domain session anti-replay window (reset on conn_gen / epoch_gen). */
+pk_proto_rx_window_t *pk_session_rx_window(pk_session_ctx_t *ctx, pk_proto_domain_t domain);
+
+typedef struct {
+    int                        slot;
+    uint32_t                   conn_gen;
+    pk_proto_domain_t          domain;
+    const char                *vin;
+    const pk_proto_session_t  *sess;
+    const pk_proto_routable_t *rmsg;
+} pk_session_obs_in_t;
+
+/* Passive authenticated state-observation RX track:
+ * Accepts AEAD-authenticated vehicle state snapshots on the active domain
+ * session even when no command txn is active or after a txn has ended.
+ * Enforces conn_gen, valid session, domain match, AEAD auth-before-commit into
+ * the session rx_window; never accepts unauthenticated plaintext. */
+bool pk_session_accept_observation_rx(pk_session_ctx_t *ctx,
+                                      const pk_session_obs_in_t *in,
+                                      uint8_t *plain_out, size_t plain_cap,
+                                      size_t *plain_len_out,
+                                      pk_evidence_t *evidence_out);
 
 /* Explicit isolated pre-session pairing acceptance entry (D03):
  * Accepts a pre-session VCSEC WhitelistOperationStatus reply ONLY while

@@ -81,12 +81,16 @@ static void expire_pending(pk_app_t *app)
         app->intent_deadline = 0;
         if (kind == PK_PENDING_WAKE_THEN) {
             pk_app_set_msg(app, PK_MSG_WAKE_TIMEOUT);
-        } else if (kind == PK_PENDING_UNLOCK_VERIFY) {
-            /* Do not keep the pre-unlock LOCKED snapshot: that leaves the primary
-             * action as UNLOCK and makes the next lock press send UNLOCK again. */
+        } else if (kind == PK_PENDING_UNLOCK_VERIFY ||
+                   (kind == PK_PENDING_COMMAND && app->pending.action == PK_ACTION_UNLOCK)) {
+            /* Symmetric with LOCK timeout: do not keep the pre-unlock LOCKED
+             * snapshot, which would leave pk_app_primary() stuck on UNLOCK. */
             app->vcsec_status_valid = false;
             app->vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
-            pk_app_set_msg(app, PK_MSG_CMD_UNCONFIRMED);
+            app->vcsec_reconcile_attempts = 0u;
+            app->vcsec_reconcile_next_ms = 0u;
+            pk_app_set_msg(app, (kind == PK_PENDING_UNLOCK_VERIFY) ? PK_MSG_CMD_UNCONFIRMED
+                                                                    : PK_MSG_CMD_TIMEOUT);
         } else {
             pk_app_set_msg(app, PK_MSG_CMD_TIMEOUT);
         }

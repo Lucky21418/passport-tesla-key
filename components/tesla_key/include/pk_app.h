@@ -245,6 +245,8 @@ typedef struct pk_app {
     /* VCSEC native unlock snapshot (avoids waking Infotainment for UNLOCK). */
     /* Authenticated VCSEC status snapshot (may feed unlock / wake logic). */
     bool           vcsec_status_valid;
+    uint8_t        vcsec_reconcile_attempts;
+    pk_ms_t        vcsec_reconcile_next_ms;
     bool           vcsec_asleep;
     pk_lock_read_t vcsec_lock_state;
     /* Non-authoritative Legacy observation for display ONLY (S2 §1).

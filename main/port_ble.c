@@ -1887,10 +1887,45 @@ static void handle_rx_frame(pk_app_t *app, int slot, uint32_t conn_gen,
             .txn_routing_addr = txn->routing_addr,
             .txn_uuid         = txn->uuid,
             .txn_req_id       = txn->req_id,
-            .rx_window        = &txn->rx_window,
+            .rx_window        = pk_session_rx_window(&s_session, rmsg.from_domain),
         };
         if (!pk_session_accept_rx(&s_session, &rx_in, s_rx_plain, sizeof(s_rx_plain),
                                   &plain_len, &evidence)) {
+            /* Observation track: accept AEAD-authenticated vehicle state
+             * snapshots on the active domain session even when no command txn
+             * is active or after a txn has ended, without completing any
+             * unrelated pending command. */
+            pk_session_obs_in_t obs_in = {
+                .slot     = slot,
+                .conn_gen = conn_gen,
+                .domain   = rmsg.from_domain,
+                .vin      = vin,
+                .sess     = sess,
+                .rmsg     = &rmsg,
+            };
+            if (!pk_session_accept_observation_rx(&s_session, &obs_in,
+                                                  s_rx_plain, sizeof(s_rx_plain),
+                                                  &plain_len, &evidence) ||
+                plain_len == 0) {
+                return;
+            }
+            if (rmsg.from_domain == PK_PROTO_DOMAIN_VEHICLE_SECURITY) {
+                pk_proto_vcsec_resp_t vresp;
+                if (pk_proto_parse_vcsec_response(s_rx_plain, plain_len, &vresp) &&
+                    vresp.has_vehicle_status) {
+                    app->vcsec_status_valid = true;
+                    app->vcsec_reconcile_attempts = 0u;
+                    app->vcsec_reconcile_next_ms = 0u;
+                    app->vcsec_asleep = (vresp.sleep_status == 2);
+                    app->vcsec_lock_state = vresp.lock_state;
+                }
+            } else if (rmsg.from_domain == PK_PROTO_DOMAIN_INFOTAINMENT) {
+                pk_proto_carserver_resp_t cresp;
+                if (pk_proto_parse_carserver_response(s_rx_plain, plain_len, &cresp) &&
+                    cresp.has_vehicle_data) {
+                    apply_infotain_caps(app, &cresp);
+                }
+            }
             return;
         }
     }
@@ -2289,11 +2324,48 @@ static void expire_wire_txns(pk_app_t *app, pk_ms_t now)
     }
 }
 
+static void poll_vcsec_reconcile(pk_app_t *app, pk_ms_t now)
+{
+    uint16_t conn_h;
+    uint16_t tx_h;
+    uint32_t conn_gen;
+    int active_slot;
+    pk_proto_key_slot_t *ks;
+    const char *vin;
+
+    if (!app || !app->connected || app->vehicle == PK_VEHICLE_NONE ||
+        app->has_pending || app->busy || app->vcsec_status_valid ||
+        app->vcsec_reconcile_attempts >= 2u || s_wire_txns[0].active) {
+        return;
+    }
+    radio_snapshot(&conn_h, &tx_h, NULL, &active_slot);
+    if (conn_h == BLE_HS_CONN_HANDLE_NONE || tx_h == 0 || active_slot != app->vehicle) {
+        return;
+    }
+    conn_gen = s_session.conn_gen;
+    ks = port_slot_keys(active_slot);
+    vin = port_slot_vin(active_slot);
+    if (!ks || !ks->vcsec.valid || !vin) {
+        return;
+    }
+    if (app->vcsec_reconcile_next_ms == 0u) {
+        app->vcsec_reconcile_next_ms = now + 1000u;
+        return;
+    }
+    if (!pk_time_due(now, app->vcsec_reconcile_next_ms)) {
+        return;
+    }
+    app->vcsec_reconcile_attempts++;
+    app->vcsec_reconcile_next_ms = now + 2000u;
+    start_background_status_probe(app, active_slot, conn_gen, ks, vin);
+}
+
 void port_ble_poll(pk_app_t *app, pk_ms_t now)
 {
     expire_wire_txns(app, now);
     poll_pair_ble_connect(app, now);
     poll_pair_step3_status(app, now);
+    poll_vcsec_reconcile(app, now);
     maybe_update_ble_conn_params(app);
     poll_ble_rssi(now);
     poll_selected_vehicle_scan(app);

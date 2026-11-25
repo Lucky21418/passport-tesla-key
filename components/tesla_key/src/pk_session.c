@@ -30,6 +30,8 @@ void pk_session_set_conn_gen(pk_session_ctx_t *ctx, uint32_t conn_gen)
     memset(ctx->handshake, 0, sizeof(ctx->handshake));
     memset(ctx->request, 0, sizeof(ctx->request));
     memset(ctx->signed_request, 0, sizeof(ctx->signed_request));
+    pk_proto_rx_window_init(&ctx->rx_window[0]);
+    pk_proto_rx_window_init(&ctx->rx_window[1]);
 }
 
 void pk_session_note_handshake_ex(pk_session_ctx_t *ctx, int slot, uint32_t conn_gen,
@@ -215,6 +217,9 @@ bool pk_session_apply(pk_session_ctx_t *ctx, const pk_session_apply_t *in,
     /* Security pre-gate #2: when epoch changes on an existing session, old
      * pending request attribution on this domain is invalidated so late
      * responses from the prior epoch cannot complete a new transaction. */
+    if (sess->epoch_gen != prev_epoch_gen) {
+        pk_proto_rx_window_init(&ctx->rx_window[idx]);
+    }
     if (prev_epoch_gen != 0u && sess->epoch_gen != prev_epoch_gen) {
         ctx->request[idx].valid = false;
         if (!used_signed) {
@@ -307,6 +312,63 @@ bool pk_session_accept_rx(const pk_session_ctx_t *ctx,
     memcpy(plain_out, in->rmsg->payload_bytes, in->rmsg->payload_len);
     *plain_len_out = in->rmsg->payload_len;
     *evidence_out = PK_EVIDENCE_LEGACY_ATTRIBUTED;
+    return true;
+}
+
+pk_proto_rx_window_t *pk_session_rx_window(pk_session_ctx_t *ctx, pk_proto_domain_t domain)
+{
+    int idx;
+    if (!ctx || (idx = session_index(domain)) < 0) {
+        return NULL;
+    }
+    return &ctx->rx_window[idx];
+}
+
+bool pk_session_accept_observation_rx(pk_session_ctx_t *ctx,
+                                      const pk_session_obs_in_t *in,
+                                      uint8_t *plain_out, size_t plain_cap,
+                                      size_t *plain_len_out,
+                                      pk_evidence_t *evidence_out)
+{
+    int idx;
+    pk_proto_decrypt_t dec;
+    size_t dec_len = 0u;
+
+    if (evidence_out) {
+        *evidence_out = PK_EVIDENCE_UNKNOWN;
+    }
+    if (plain_len_out) {
+        *plain_len_out = 0u;
+    }
+    if (!ctx || !in || !in->rmsg || !in->sess || !in->sess->valid ||
+        !plain_out || !plain_len_out || !evidence_out) {
+        return false;
+    }
+    if ((idx = session_index(in->domain)) < 0 ||
+        in->conn_gen != ctx->conn_gen ||
+        !in->rmsg->has_from_domain || in->rmsg->from_domain != in->domain ||
+        !in->rmsg->has_payload_bytes || in->rmsg->payload_len == 0u ||
+        in->rmsg->payload_len > plain_cap) {
+        return false;
+    }
+    /* Passive state observations MUST be cryptographically authenticated;
+     * unauthenticated plaintext is never accepted without an attributed txn. */
+    if (!in->rmsg->has_sig_data && !in->rmsg->has_aes_gcm_resp) {
+        return false;
+    }
+    dec.sess = in->sess;
+    dec.vin = in->vin;
+    dec.req_id = NULL;
+    if (!pk_proto_decrypt_routable_payload(in->rmsg, &dec, plain_out, plain_cap, &dec_len)) {
+        pk_proto_zeroize(plain_out, plain_cap);
+        return false;
+    }
+    if (!pk_proto_rx_window_accept(&ctx->rx_window[idx], in->rmsg->resp_counter)) {
+        pk_proto_zeroize(plain_out, plain_cap);
+        return false;
+    }
+    *plain_len_out = dec_len;
+    *evidence_out = PK_EVIDENCE_CRYPTO_AUTHENTICATED;
     return true;
 }
 
