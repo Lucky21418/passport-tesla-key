@@ -45,6 +45,24 @@ class KeyWakeGuardWiringTest(unittest.TestCase):
         self.assertLess(main_body.index("poll_key_wake_guard()"),
                         main_body.index("pk_btn_adapter_feed_mv("))
 
+    def test_unknown_lock_state_main_ui_copy(self) -> None:
+        ui = read("main/app_ui.c")
+        pages = read("main/app_ui_pages.c")
+        footer_body = function_body(ui, "footer_for_main")
+        self.assertIn("PK_ACTION_VCSEC_GET_STATUS_ONCE", footer_body)
+        self.assertLess(footer_body.index("PK_ACTION_VCSEC_GET_STATUS_ONCE"),
+                        footer_body.index("!pk_app_parked("))
+        self.assertIn("● 查锁态", footer_body)
+        self.assertIn("锁态未确认", footer_body)
+
+        main_page = function_body(pages, "app_ui_render_page_main")
+        self.assertIn("PK_ACTION_VCSEC_GET_STATUS_ONCE", main_page)
+        branch = main_page[main_page.index("PK_ACTION_VCSEC_GET_STATUS_ONCE"):]
+        branch = branch[:branch.index("} else {")]
+        self.assertIn("锁态未确认", branch)
+        self.assertIn("查锁态", branch)
+        self.assertNotIn("闭锁", branch)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -181,11 +181,18 @@ static footer_spec_t footer_for_main(const pk_app_t *app)
     if (app->moving) {
         return (footer_spec_t){ "▲ 不可用", "● 闭锁", "▼ 不可用", "长按●设置 · 双击状态", COL_WHITE };
     }
+    if (pk_app_primary(app) == PK_ACTION_VCSEC_GET_STATUS_ONCE) {
+        const bool parked = pk_app_parked(app);
+        return (footer_spec_t){
+            parked ? "▲ 前备箱" : "▲ 不可用",
+            "● 查锁态",
+            parked ? "▼ 后备箱" : "▼ 不可用",
+            "锁态未确认 · 单击查状态",
+            COL_WHITE
+        };
+    }
     if (!pk_app_parked(app)) {
         return (footer_spec_t){ "▲ 不可用", "● 闭锁", "▼ 不可用", "长按●设置 · 双击状态", COL_WHITE };
-    }
-    if (pk_app_primary(app) == PK_ACTION_VCSEC_GET_STATUS_ONCE) {
-        return (footer_spec_t){ "▲ 前备箱", "● 查锁态", "▼ 后备箱", "锁态未确认 · 单击查状态", COL_WHITE };
     }
     if (pk_app_primary(app) == PK_ACTION_UNLOCK) {
         return (footer_spec_t){ "▲ 前备箱", "● 开锁", "▼ 后备箱", "长按●设置 · 双击状态", COL_ALERT };
