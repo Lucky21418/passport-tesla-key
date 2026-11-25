@@ -11,7 +11,7 @@
 #include <string.h>
 
 /* ==========================================================================
- * 1. Session Lifecycle & Official 64-bit Anti-Replay Window (D02)
+ * 1. Session Lifecycle & Official Width-32 Anti-Replay Window (D02)
  * ========================================================================== */
 
 void pk_proto_session_clear(pk_proto_session_t *sess)
@@ -28,11 +28,13 @@ void pk_proto_rx_window_init(pk_proto_rx_window_t *w)
     }
 }
 
-/* Official vehicle-command internal/authentication/window.go semantics:
+/* Official vehicle-command internal/authentication/window.go, using
+ * windowSize 32 from crypto.go. The product window matches that width.
  *   - First response counter (including 0) is accepted.
- *   - Out-of-order within [counter-64 .. counter-1] is accepted once.
- *   - Duplicate (adjacent or non-adjacent A-B-A) and age > 64 are rejected.
- *   - UB-safe shift guard for shift >= 64. */
+ *   - Out-of-order age in [1..32] is accepted once when that bit is clear.
+ *   - Duplicates and age > 32 are rejected and leave the window unchanged.
+ *   - The uint64 shift follows window.go. shift >= 64 is guarded so the C
+ *     shift stays defined; that guard is the bitmap width, not windowSize. */
 bool pk_proto_rx_window_accept(pk_proto_rx_window_t *w, uint32_t counter)
 {
     if (!w) {
@@ -50,7 +52,7 @@ bool pk_proto_rx_window_accept(pk_proto_rx_window_t *w, uint32_t counter)
     if (counter < w->counter) {
         uint32_t age = w->counter - counter;
         uint64_t mask;
-        if (age > 64u) {
+        if (age > PK_PROTO_RX_WINDOW_SIZE) {
             return false;
         }
         mask = 1ULL << (age - 1u);

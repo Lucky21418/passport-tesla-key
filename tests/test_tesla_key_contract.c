@@ -2668,24 +2668,84 @@ static void test_session_info_clock_rollback_rejected(void)
            "rollback: rejected SessionInfo leaves session untouched");
 }
 
+/* Build the window_test.go starting point: counter 100, bits 0 and 5 set
+ * (counters 99 and 94 already seen). */
+static void seed_window_100_bits_0_and_5(pk_proto_rx_window_t *w)
+{
+    pk_proto_rx_window_init(w);
+    expect(pk_proto_rx_window_accept(w, 94u), "window seed: 94");
+    expect(pk_proto_rx_window_accept(w, 99u), "window seed: 99");
+    expect(pk_proto_rx_window_accept(w, 100u), "window seed: 100 with bits 0 and 5");
+}
+
 static void test_response_counter_reuse_rejected(void)
 {
-    /* D02 upgrade (replaces pre-S2 1-slot pk_proto_resp_counter_accept):
-     * official vehicle-command 64-bit sliding anti-replay window rejects
-     * A-B-A replays (0->1->0) and duplicates while supporting in-window
-     * out-of-order packets up to age=64 (age=65 rejected). */
+    /* Official vehicle-command windowSize is 32 (crypto.go). The product
+     * window matches that width: in-window reorder is accepted once, and
+     * age > 32 is rejected without changing the window. */
     pk_proto_rx_window_t w;
+
+    expect(PK_PROTO_RX_WINDOW_SIZE == 32u, "counter: official window width is 32");
 
     pk_proto_rx_window_init(&w);
     expect(pk_proto_rx_window_accept(&w, 0u), "counter: 0 accepted");
     expect(!pk_proto_rx_window_accept(&w, 0u), "counter: duplicate 0 rejected");
     expect(pk_proto_rx_window_accept(&w, 1u), "counter: 1 accepted");
     expect(!pk_proto_rx_window_accept(&w, 0u), "counter: A-B-A replay 0->1->0 rejected");
-    expect(pk_proto_rx_window_accept(&w, 100u), "counter: 100 accepted");
-    expect(pk_proto_rx_window_accept(&w, 36u), "counter: in-window age=64 accepted");
-    expect(!pk_proto_rx_window_accept(&w, 36u), "counter: duplicate 36 rejected");
-    expect(!pk_proto_rx_window_accept(&w, 35u), "counter: out-of-window age=65 rejected");
     expect(!pk_proto_rx_window_accept(NULL, 9u), "counter: null rejected");
+
+    pk_proto_rx_window_init(&w);
+    expect(pk_proto_rx_window_accept(&w, 100u), "counter: 100 accepted");
+    expect(pk_proto_rx_window_accept(&w, 68u), "counter: in-window age=32 accepted");
+    expect(!pk_proto_rx_window_accept(&w, 68u), "counter: duplicate age=32 rejected");
+    expect(!pk_proto_rx_window_accept(&w, 67u), "counter: out-of-window age=33 rejected");
+    expect(pk_proto_rx_window_accept(&w, 69u), "counter: in-window reorder age=31 accepted");
+
+    pk_proto_rx_window_init(&w);
+    expect(pk_proto_rx_window_accept(&w, 100u), "counter: fresh 100");
+    expect(!pk_proto_rx_window_accept(&w, 67u), "counter: age=33 leaves window unchanged");
+    expect(pk_proto_rx_window_accept(&w, 68u), "counter: age=32 still accepted after outside reject");
+
+    pk_proto_rx_window_init(&w);
+    expect(pk_proto_rx_window_accept(&w, 100u), "counter: shift source 100");
+    expect(pk_proto_rx_window_accept(&w, 132u), "counter: forward shift of 32 accepted");
+    expect(!pk_proto_rx_window_accept(&w, 100u), "counter: previous high marked seen at age=32");
+    expect(pk_proto_rx_window_accept(&w, 131u), "counter: unseen age=1 accepted after shift 32");
+    expect(!pk_proto_rx_window_accept(&w, 99u), "counter: age=33 rejected after shift 32");
+
+    pk_proto_rx_window_init(&w);
+    expect(pk_proto_rx_window_accept(&w, 100u), "counter: jump source 100");
+    expect(pk_proto_rx_window_accept(&w, 500u), "counter: jump past window accepted");
+    expect(!pk_proto_rx_window_accept(&w, 100u), "counter: pre-jump value rejected");
+    expect(pk_proto_rx_window_accept(&w, 499u), "counter: age=1 after clearing jump accepted");
+    expect(pk_proto_rx_window_accept(&w, 468u), "counter: age=32 after clearing jump accepted");
+    expect(!pk_proto_rx_window_accept(&w, 467u), "counter: age=33 after clearing jump rejected");
+
+    seed_window_100_bits_0_and_5(&w);
+    expect(!pk_proto_rx_window_accept(&w, 100u), "counter: equal counter rejected");
+    expect(!pk_proto_rx_window_accept(&w, 99u), "counter: in-window already-seen 99 rejected");
+    expect(!pk_proto_rx_window_accept(&w, 3u), "counter: age far outside window rejected");
+    expect(pk_proto_rx_window_accept(&w, 98u), "counter: in-window unseen 98 accepted");
+    expect(!pk_proto_rx_window_accept(&w, 94u), "counter: already-seen 94 rejected");
+
+    seed_window_100_bits_0_and_5(&w);
+    expect(pk_proto_rx_window_accept(&w, 101u), "counter: forward +1 accepted");
+    expect(!pk_proto_rx_window_accept(&w, 100u), "counter: previous high rejected after +1");
+    expect(!pk_proto_rx_window_accept(&w, 99u), "counter: already-seen 99 rejected after +1");
+    expect(pk_proto_rx_window_accept(&w, 95u), "counter: unseen gap 95 accepted after +1");
+
+    seed_window_100_bits_0_and_5(&w);
+    expect(pk_proto_rx_window_accept(&w, 103u), "counter: forward +3 accepted");
+    expect(!pk_proto_rx_window_accept(&w, 100u), "counter: previous high rejected after +3");
+    expect(!pk_proto_rx_window_accept(&w, 94u), "counter: already-seen 94 rejected after +3");
+    expect(pk_proto_rx_window_accept(&w, 97u), "counter: unseen 97 accepted after +3");
+
+    seed_window_100_bits_0_and_5(&w);
+    expect(pk_proto_rx_window_accept(&w, 500u), "counter: window_test jump to 500 accepted");
+    expect(!pk_proto_rx_window_accept(&w, 100u), "counter: old high rejected after jump to 500");
+    expect(!pk_proto_rx_window_accept(&w, 94u), "counter: old seen bit rejected after jump to 500");
+    expect(pk_proto_rx_window_accept(&w, 468u), "counter: age=32 accepted after jump to 500");
+    expect(!pk_proto_rx_window_accept(&w, 467u), "counter: age=33 rejected after jump to 500");
 }
 
 static void test_wake_then_and_toggle_ack(void)

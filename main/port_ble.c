@@ -46,7 +46,7 @@ typedef struct {
 
 /* protocol.md invariants:
  *  - At most one in-flight request per domain is kept here (VCSEC + Infotainment),
- *    each with its own 64-bit sliding anti-replay window (D02).
+ *    each with its own anti-replay window of official width 32 (D02).
  *  - VCSEC replies may omit request_uuid, so a reply is attributed by conn_gen,
  *    epoch_gen, routing address, and deadline inside pk_session_accept_rx(). */
 static active_wire_txn_t s_wire_txns[2];
@@ -1878,7 +1878,7 @@ static void handle_rx_frame(pk_app_t *app, int slot, uint32_t conn_gen,
 
     /* Single authoritative RX acceptance kernel (D02 + D03):
      * attribution (slot + conn_gen + epoch_gen + domain + routing_addr +
-     * optional uuid + deadline) -> AEAD decrypt -> 64-bit sliding-window
+     * optional uuid + deadline) -> AEAD decrypt -> official width-32 sliding-window
      * commit -> explicit evidence classification. */
     {
         pk_session_rx_in_t rx_in = {

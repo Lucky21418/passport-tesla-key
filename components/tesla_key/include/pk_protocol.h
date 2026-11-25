@@ -118,11 +118,18 @@ typedef struct {
     uint32_t flags;
 } pk_proto_session_t;
 
-/* Per-request 64-bit response anti-replay window (official vehicle-command window.go) */
+/* Official vehicle-command windowSize (internal/authentication/crypto.go).
+ * The product anti-replay window is aligned to this official width.
+ * history is a uint64 bitmap because that is the verifier storage type
+ * (the official comment requires the width to be at most 64). Freshness
+ * uses PK_PROTO_RX_WINDOW_SIZE, which is the official value 32. */
+#define PK_PROTO_RX_WINDOW_SIZE 32u
+
+/* Per-request response anti-replay window, aligned to official width 32. */
 typedef struct {
     bool     used;
     uint32_t counter;
-    uint64_t history; /* bit (age-1) set for age in [1..64] strictly below counter */
+    uint64_t history; /* bit (age-1) for age in [1..32] strictly below counter */
 } pk_proto_rx_window_t;
 
 void pk_proto_rx_window_init(pk_proto_rx_window_t *w);

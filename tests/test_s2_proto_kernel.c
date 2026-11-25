@@ -631,7 +631,8 @@ static void test_n01_to_n08_kernel(void)
           ev == PK_EVIDENCE_CRYPTO_AUTHENTICATED,
           "N03.1", "Auth-before-commit: authentic counter 0 accepted after forged counter 0");
 
-    /* N03: Out-of-order 2 -> 1 accepted, then A-B-A replay 0 rejected, 100->36 ok, 100->35 replay */
+    /* N03: Out-of-order 2 -> 1 accepted, then A-B-A replay 0 rejected.
+     * Official width 32: 100->68 is inside, 100->67 is outside. */
     wlen = build_sim_vcsec_resp_wire(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
                                      ROUTE1, NULL, VEC_VIN, req_id, 2u, true, false, 16u, 12u, false);
     pk_proto_parse_routable(wire, wlen, &rmsg);
@@ -649,10 +650,10 @@ static void test_n01_to_n08_kernel(void)
     pk_proto_rx_window_t wbound;
     pk_proto_rx_window_init(&wbound);
     check(pk_proto_rx_window_accept(&wbound, 100u) &&
-          pk_proto_rx_window_accept(&wbound, 36u) &&
-          !pk_proto_rx_window_accept(&wbound, 35u) &&
-          !pk_proto_rx_window_accept(&wbound, 36u),
-          "N03.3", "Sliding window boundary 100->36 OK, 100->35 & dup 36 REJECTED");
+          pk_proto_rx_window_accept(&wbound, 68u) &&
+          !pk_proto_rx_window_accept(&wbound, 67u) &&
+          !pk_proto_rx_window_accept(&wbound, 68u),
+          "N03.3", "Official width 32: 100->68 OK, 100->67 and dup 68 REJECTED");
 
     /* N03: TX counter rollover guard */
     sess_vcsec.counter = UINT32_MAX;
