@@ -32,12 +32,13 @@ typedef struct {
     pk_ms_t  at_ms;
 } pk_session_ref_t;
 
-#define PK_SESSION_REQ_ID_CAP    4
+#define PK_SESSION_REQ_ID_CAP    8
 
 typedef struct {
-    bool    valid;
-    int     slot;
-    uint8_t req_id[17];
+    bool                 valid;
+    int                  slot;
+    uint8_t              req_id[17];
+    pk_proto_rx_window_t rx_window;
 } pk_session_req_id_t;
 
 typedef struct {
@@ -130,6 +131,9 @@ bool pk_session_accept_rx(const pk_session_ctx_t *ctx,
 
 /* Return the domain session anti-replay window (reset on conn_gen / epoch_gen). */
 pk_proto_rx_window_t *pk_session_rx_window(pk_session_ctx_t *ctx, pk_proto_domain_t domain);
+pk_proto_rx_window_t *pk_session_rx_window_for_req(pk_session_ctx_t *ctx,
+                                                   pk_proto_domain_t domain,
+                                                   const uint8_t req_id[17]);
 
 /* Record a signed request's 17-byte req_id on the domain session so passive
  * AEAD observations can verify AAD even after the short-lived wire txn ends. */

@@ -1831,7 +1831,7 @@ static void handle_rx_frame(pk_app_t *app, int slot, uint32_t conn_gen,
                     .txn_routing_addr = ftxn->routing_addr,
                     .txn_uuid         = ftxn->uuid,
                     .txn_req_id       = ftxn->req_id,
-                    .rx_window        = pk_session_rx_window(&s_session, dom),
+                    .rx_window        = pk_session_rx_window_for_req(&s_session, dom, ftxn->req_id),
                 };
                 pk_evidence_t chk_ev = PK_EVIDENCE_UNKNOWN;
                 size_t chk_len = 0;
@@ -1897,7 +1897,7 @@ static void handle_rx_frame(pk_app_t *app, int slot, uint32_t conn_gen,
             .txn_routing_addr = txn->routing_addr,
             .txn_uuid         = txn->uuid,
             .txn_req_id       = txn->req_id,
-            .rx_window        = pk_session_rx_window(&s_session, rmsg.from_domain),
+            .rx_window        = pk_session_rx_window_for_req(&s_session, rmsg.from_domain, txn->req_id),
         };
         if (!pk_session_accept_rx(&s_session, &rx_in, s_rx_plain, sizeof(s_rx_plain),
                                   &plain_len, &evidence)) {

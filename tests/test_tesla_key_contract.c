@@ -3416,6 +3416,17 @@ static void test_command_observation_decoupling(void)
                strstr(sub, "锁车") == NULL && strstr(sub, "闭锁") == NULL,
                "decouple: PK_MSG_RECONNECTED copy itself never prompts lock");
     }
+
+    /* 7. Partial VehicleStatus with PK_LOCK_READ_UNKNOWN must NOT clobber
+     * already-known vcsec_status_valid / vcsec_lock_state. */
+    {
+        setup_connected_main_for_keys(&app, &ad, &btn);
+        pk_app_vcsec_status(&app, false, PK_LOCK_READ_LOCKED);
+        pk_app_vcsec_status(&app, true, PK_LOCK_READ_UNKNOWN);
+        expect(app.vcsec_status_valid && app.vcsec_lock_state == PK_LOCK_READ_LOCKED &&
+               app.vcsec_asleep,
+               "decouple: missing-field VehicleStatus preserves known lock state");
+    }
 }
 
 int main(void)

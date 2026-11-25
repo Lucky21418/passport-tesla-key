@@ -328,6 +328,29 @@ pk_proto_rx_window_t *pk_session_rx_window(pk_session_ctx_t *ctx, pk_proto_domai
     return &ctx->rx_window[idx];
 }
 
+pk_proto_rx_window_t *pk_session_rx_window_for_req(pk_session_ctx_t *ctx,
+                                                   pk_proto_domain_t domain,
+                                                   const uint8_t req_id[17])
+{
+    int idx;
+    uint8_t step;
+
+    if (!ctx || (idx = session_index(domain)) < 0) {
+        return NULL;
+    }
+    if (req_id) {
+        for (step = 0u; step < PK_SESSION_REQ_ID_CAP; ++step) {
+            uint8_t pos = (uint8_t)((ctx->req_id_next[idx] + PK_SESSION_REQ_ID_CAP - 1u - step) %
+                                    PK_SESSION_REQ_ID_CAP);
+            pk_session_req_id_t *rid = &ctx->req_ids[idx][pos];
+            if (rid->valid && memcmp(rid->req_id, req_id, 17u) == 0) {
+                return &rid->rx_window;
+            }
+        }
+    }
+    return &ctx->rx_window[idx];
+}
+
 void pk_session_note_req_id(pk_session_ctx_t *ctx, int slot, uint32_t conn_gen,
                             pk_proto_domain_t domain, const uint8_t req_id[17])
 {
@@ -341,6 +364,7 @@ void pk_session_note_req_id(pk_session_ctx_t *ctx, int slot, uint32_t conn_gen,
     ctx->req_ids[idx][pos].valid = true;
     ctx->req_ids[idx][pos].slot = slot;
     memcpy(ctx->req_ids[idx][pos].req_id, req_id, 17u);
+    pk_proto_rx_window_init(&ctx->req_ids[idx][pos].rx_window);
     ctx->req_id_next[idx] = (uint8_t)((pos + 1u) % PK_SESSION_REQ_ID_CAP);
 }
 
@@ -354,6 +378,7 @@ bool pk_session_accept_observation_rx(pk_session_ctx_t *ctx,
     pk_proto_decrypt_t dec;
     size_t dec_len = 0u;
     bool decrypted = false;
+    pk_proto_rx_window_t *win = NULL;
 
     if (evidence_out) {
         *evidence_out = PK_EVIDENCE_UNKNOWN;
@@ -382,27 +407,29 @@ bool pk_session_accept_observation_rx(pk_session_ctx_t *ctx,
     if (in->req_id) {
         dec.req_id = in->req_id;
         decrypted = pk_proto_decrypt_routable_payload(in->rmsg, &dec, plain_out, plain_cap, &dec_len);
+        win = pk_session_rx_window_for_req(ctx, in->domain, in->req_id);
     } else {
         uint8_t step;
         for (step = 0u; step < PK_SESSION_REQ_ID_CAP; ++step) {
             uint8_t pos = (uint8_t)((ctx->req_id_next[idx] + PK_SESSION_REQ_ID_CAP - 1u - step) %
                                     PK_SESSION_REQ_ID_CAP);
-            const pk_session_req_id_t *rid = &ctx->req_ids[idx][pos];
+            pk_session_req_id_t *rid = &ctx->req_ids[idx][pos];
             if (!rid->valid || rid->slot != in->slot) {
                 continue;
             }
             dec.req_id = rid->req_id;
             if (pk_proto_decrypt_routable_payload(in->rmsg, &dec, plain_out, plain_cap, &dec_len)) {
                 decrypted = true;
+                win = &rid->rx_window;
                 break;
             }
         }
     }
-    if (!decrypted) {
+    if (!decrypted || !win) {
         pk_proto_zeroize(plain_out, plain_cap);
         return false;
     }
-    if (!pk_proto_rx_window_accept(&ctx->rx_window[idx], in->rmsg->resp_counter)) {
+    if (!pk_proto_rx_window_accept(win, in->rmsg->resp_counter)) {
         pk_proto_zeroize(plain_out, plain_cap);
         return false;
     }

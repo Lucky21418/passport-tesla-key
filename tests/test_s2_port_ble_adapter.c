@@ -1447,6 +1447,58 @@ int main(void)
               "N14", "radio_cancel(0) preserves active background VCSEC reconcile probe");
     }
 
+    /* N15: Consecutive signed requests on the same domain whose responses both
+     * start at resp_counter==0 MUST both be accepted (per-req_id rx_window),
+     * while replaying resp_counter==0 on the same req_id is still rejected. */
+    {
+        uint8_t plain[64], wire[256];
+        uint8_t req_id_a[17], req_id_b[17];
+        size_t plen, wlen;
+        VCSEC_FromVCSECMessage vm;
+        pb_ostream_t os;
+        pk_proto_key_slot_t *ks;
+
+        setup_connected_slot0(247u, true);
+        ks = port_slot_keys(0);
+        memset(req_id_a, 0xA1, sizeof(req_id_a));
+        memset(req_id_b, 0xB2, sizeof(req_id_b));
+        pk_session_note_req_id(&s_session, 0, s_session.conn_gen,
+                               PK_PROTO_DOMAIN_VEHICLE_SECURITY, req_id_a);
+        pk_session_note_req_id(&s_session, 0, s_session.conn_gen,
+                               PK_PROTO_DOMAIN_VEHICLE_SECURITY, req_id_b);
+        s_wire_txns[0].active = false;
+
+        /* Request A reply with resp_counter == 0 -> LOCKED */
+        memset(&vm, 0, sizeof(vm));
+        vm.which_sub_message = VCSEC_FromVCSECMessage_vehicleStatus_tag;
+        vm.sub_message.vehicleStatus.vehicleLockState = VCSEC_VehicleLockState_E_VEHICLELOCKSTATE_LOCKED;
+        vm.sub_message.vehicleStatus.vehicleSleepStatus = VCSEC_VehicleSleepStatus_E_VEHICLE_SLEEP_STATUS_AWAKE;
+        os = pb_ostream_from_buffer(plain, sizeof(plain));
+        pb_encode(&os, VCSEC_FromVCSECMessage_fields, &vm);
+        plen = os.bytes_written;
+        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                   s_wire_txns[0].routing_addr, s_wire_txns[0].uuid,
+                                   plain, plen, &ks->vcsec, req_id_a,
+                                   true, 0u, false, 0);
+        inject_rx_wire(wire, wlen);
+        bool got_a = (g_app.vcsec_status_valid && g_app.vcsec_lock_state == PK_LOCK_READ_LOCKED);
+
+        /* Request B reply ALSO with resp_counter == 0 -> UNLOCKED */
+        vm.sub_message.vehicleStatus.vehicleLockState = VCSEC_VehicleLockState_E_VEHICLELOCKSTATE_UNLOCKED;
+        os = pb_ostream_from_buffer(plain, sizeof(plain));
+        pb_encode(&os, VCSEC_FromVCSECMessage_fields, &vm);
+        plen = os.bytes_written;
+        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                   s_wire_txns[0].routing_addr, s_wire_txns[0].uuid,
+                                   plain, plen, &ks->vcsec, req_id_b,
+                                   true, 0u, false, 0);
+        inject_rx_wire(wire, wlen);
+        bool got_b = (g_app.vcsec_status_valid && g_app.vcsec_lock_state == PK_LOCK_READ_UNLOCKED);
+
+        check(got_a && got_b,
+              "N15", "consecutive requests with resp_counter==0 both accepted via per-req_id rx_window");
+    }
+
     printf("\nSUMMARY: %d PASS, %d FAIL (total %d)\n", g_pass, g_fail, g_pass + g_fail);
     return (g_fail == 0) ? 0 : 1;
 }

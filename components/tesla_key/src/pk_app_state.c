@@ -284,11 +284,13 @@ void pk_app_vcsec_status(pk_app_t *app, bool asleep, pk_lock_read_t lock_state)
     if (!app) {
         return;
     }
-    app->vcsec_status_valid = true;
-    app->vcsec_reconcile_attempts = 0u;
-    app->vcsec_reconcile_next_ms = 0u;
     app->vcsec_asleep = asleep;
-    app->vcsec_lock_state = lock_state;
+    if (lock_state != PK_LOCK_READ_UNKNOWN) {
+        app->vcsec_status_valid = true;
+        app->vcsec_reconcile_attempts = 0u;
+        app->vcsec_reconcile_next_ms = 0u;
+        app->vcsec_lock_state = lock_state;
+    }
     if (app->has_pending && app->pending.action == PK_ACTION_VCSEC_GET_STATUS_ONCE &&
         (app->pending.kind == PK_PENDING_UNLOCK_VERIFY ||
          app->pending.kind == PK_PENDING_COMMAND)) {
