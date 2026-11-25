@@ -40,6 +40,16 @@
 8. **单次单项派工与实车红线**：派工仍严格保持一次一项；不执行实车配对与实车控制。
 9. **双击误触发状态（已共同确认采用方案 E）**：已共同确认采用方案 E（`PK_DOUBLE_MS = 300 ms`、保留跨窗口 / `▲` / `▼` 与 ADC 无效读数的 `120 ms` 保持锁、仅对 `●` 回到有效 `>= 1900 mV` 干净松开区采用 `40 ms` 对称释放确认、`5 ms` `esp_timer` 中值采样按真实采样时刻入队并在深睡前停删定时器、手势进行中不被无关后台清理打断）；真机双击手感验收仍留待末尾一次性集中真机测试完成。
 
+### 当前 Active Goal 与持续开发计划（2026-11-25，基线 `a3a5305`）
+
+- **Active Goal**：在 `cand/d08-dead-code-cleanup` 上，以 `a3a5305` 为已冻结可测基线，连续完成：1）字库按已裁决共识改到思源黑体 Medium 12/16，保留 4bpp；2）不依赖真机的官方低优先级项，一次一项。每项先主机自检，再普通推送。全程不刷机、不实车。
+- **冻结基线**：设备上已授权刷入且官方独审通过的是 `a3a530556938f69cd5acbc047bdb23d96a1c492f`（tree `25af623c1ca29e94fd59635be28443655b038adf`），不改写、不 rebase、不自行刷入新树；`main` 保持 `e85197d56abe92c35a1cfb84fad85fba2545c9cc`，`feature/tesla-key` 保持 `47fd967aaa22d619fce3ffa15a3e97d5bd4ccac2`。
+- **执行顺序（一次一项）**：
+  1. 将 Active Goal 与本计划落盘保存（仅改文档，提交并普通推送）。
+  2. 实施字体共识：官方 OFL-1.1 `SourceHanSansSC-Medium.otf` 按 `12px` / `16px` 实际字号、`--bpp 4 --no-compress` 分别生成，无运行时缩放，不新增 `14px`、不改 `1bpp`；深色背景 `COL_MUTED` 可略提亮（靠近 `#A8B0C2`），不改已批准图标与二维码；更新覆盖与宽度门禁通过后提交并普通推送。
+  3. 清点此前官方独审中仍未关闭且不依赖真机的低优先级项，按严重度从高到低一次一项修复、主机测试并普通推送；若无则写明结束。
+  4. 禁区与硬停止：不做仓库大扫除、不合并 `main` / `feature/tesla-key`、不重开解耦架构、不改 Option E、不刷机、不实车；遇需真机/审批/安全不确定则标 `NEED_HUMAN` 并跳过。
+
 ## 自定义 8 MB 分区布局与烧录已存数据政策
 
 遵循 [`docs/development/engineering/firmware-layout.zh_CN.md`](docs/development/engineering/firmware-layout.zh_CN.md)，本应用采用经过校验的自定义 8 MB [`partitions.csv`](partitions.csv)：

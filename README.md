@@ -40,6 +40,16 @@ Per the user-confirmed Basic Edition workflow update on 2026-11-24, subsequent B
 8. **Single-Item Dispatch & Vehicle Safety Boundary**: Task dispatch remains strictly one item at a time; live-vehicle pairing and live-vehicle control are not executed.
 9. **Double-Click Mis-Trigger Status (Option E Jointly Confirmed)**: Jointly confirmed Option E (`PK_DOUBLE_MS = 300 ms`, symmetric `40 ms` clean-release confirmation for `●` at valid `>= 1900 mV` while preserving `120 ms` cross-window / side-key / invalid-ADC hold, `5 ms` `esp_timer` median-filtered sampling with real sample timestamps and pre-deep-sleep timer teardown, and preserving active gesture windows across unrelated background expiry); on-device feel verification remains deferred to the consolidated hardware test pass.
 
+### Active Goal & Continuous Development Plan (2026-11-25, Base `a3a5305`)
+
+- **Active Goal**: On `cand/d08-dead-code-cleanup` with `a3a5305` as the frozen testable baseline, complete sequentially: 1) migrate bundled CJK fonts per agreed consensus to Source Han Sans SC Medium 12/16 while keeping 4 bpp; 2) resolve remaining non-device-dependent official low-priority review items one at a time. Run host validation and normal push per item; no flashing and no live-vehicle operations.
+- **Frozen Baseline**: Authorized on-device / review-passed commit is `a3a530556938f69cd5acbc047bdb23d96a1c492f` (tree `25af623c1ca29e94fd59635be28443655b038adf`); never rewrite/rebase it and never flash new trees automatically. `main` stays at `e85197d56abe92c35a1cfb84fad85fba2545c9cc` and `feature/tesla-key` stays at `47fd967aaa22d619fce3ffa15a3e97d5bd4ccac2`.
+- **Sequential Plan (One Item at a Time)**:
+  1. Persist Active Goal and Plan in repository docs (docs-only commit and normal push).
+  2. Implement font consensus: official OFL-1.1 `SourceHanSansSC-Medium.otf` generated separately at `12px` and `16px` with `--bpp 4 --no-compress`, no runtime scaling, no `14px`, no `1bpp`; optionally brighten `COL_MUTED` near `#A8B0C2` without altering approved icons/QR; update coverage and width gates, validate on host, commit, and push.
+  3. Audit and fix remaining non-device-dependent official low-priority items one by one by severity; if none remain, document and stop.
+  4. Hard stops & exclusions: no repo-wide cleanup, no merge to `main` / `feature/tesla-key`, no reopening decoupling architecture, no Option E timing changes, no flashing, no live-vehicle actions; mark `NEED_HUMAN` if blocked on device/approval/security uncertainty.
+
 ## Custom 8 MB Partition Layout and Flashing / Stored Data Policy
 
 Per [`docs/development/engineering/firmware-layout.md`](docs/development/engineering/firmware-layout.md), this application uses a validated custom 8 MB [`partitions.csv`](partitions.csv):
