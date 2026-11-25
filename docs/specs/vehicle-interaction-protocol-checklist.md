@@ -2,6 +2,8 @@
 
 裁决版：2026-11-25 23:00 CST（Asia/Shanghai）。由总管把官方云端核实清单与仅发给总管的数份三方研究报告合并，并把不采信的三方结论一并列入，便于后续查找，避免重复论证。
 
+增补：2026-11-25 23:30 CST。收入用户再交的 Word《车机交互规范只读核实清单（对照立项五个参考仓库）》。官方 Part 1 / Part 2 仍不改写；新增条目写入材料来源与 Part 3。本轮三项修复不扩大。
+
 权威顺序：`teslamotors/vehicle-command` @ `0a582da430c4aca6d397fb6cbed5b4d6bb380125`，以及官方云端清单（[bc-d7db7c3b](https://cursor.com/agents/bc-d7db7c3b-b1b8-52a7-b6cc-5471aee508be)）为 A。三方研究报告是参考与已踩坑记录，冲突以官方为准。本文件不替代官方代码独审。
 
 产品对照节点：`Lucky21418/passport-tesla-key` 候选分支 `cand/d08-dead-code-cleanup` @ `1377473a0170fde55a3eacba6068ef5767adc9d2`。`main`（`e85197d56abe92c35a1cfb84fad85fba2545c9cc`）与 `feature/tesla-key`（`47fd967aaa22d619fce3ffa15a3e97d5bd4ccac2`）未被移动。设备仍为已授权且独审通过的 `a3a5305`。本文件不授权刷机。
@@ -724,6 +726,7 @@ Do not adopt: a domain-level response window, “reject counter 0,” window wid
 | DeepSeek v4-pro 复核（对 flash 逐条重写） | 2026-11-25 | 只读对照，优于 flash | 采信其对 flash 的勘误与产品 HMAC/窗口源头/回绕等核对；不采信状态页唤醒为可接受策略 |
 | Antigravity 详细踩坑清单 `tesla_protocol_and_pitfalls_detailed.md` | 2026-11-25 | 三方已踩坑补充 | 主干与官方一致；额外嵌入式避开项保留为后续，不扩大本轮修复 |
 | cite 风格长报告《车机交互规范与协议核实清单报告》 | 2026-11-25 | 三方综述，引用偏转写 | 主干部分可参考；多处把 B/C 写成 A，见下方不采信表 |
+| Word《车机交互规范只读核实清单（对照立项五个参考仓库）》 | 2026-11-25 23:22 | 三方只读对照（当时读不到产品仓，也未直读 session.go / ble.go） | 主干多数与官方一致，P-01–P-12 可作已踩坑索引；「用完即断」和把窗口 32 / 1024 降为未核实，以及 5.1 整节当编码门禁，见 R13–R16 |
 
 仓库活对象仍以文首 Sources 表为准。`yoziru/tesla-ble` 仅对照，AGPL，不作运行时。
 
@@ -765,6 +768,16 @@ Do not adopt: a domain-level response window, “reject counter 0,” window wid
 12. AG 详细清单中与官方主干一致的避开项采信。其中路由地址轮换、SessionInfo 公钥绑定、AddKey 的 PRESENT_KEY 成帧、nanopb 的 `has_` 与零值、NimBLE / ESP32-C3 内存与断连清理，作为后续嵌入式避开项保留，不纳入本轮三项修复。
 13. proto3 省略字段的零值陷阱（锁态、关闭件、睡眠）采信官方 App1–App3，本轮锁态显示必须改。
 
+14. `FLAG_ENCRYPT_RESPONSE` 是位序号，掩码必须是 `1 << 1 = 2`。写成 1 实际置的是 `FLAG_USER_COMMAND`，实车常见 Fault 28（Issue #390）。响应 AAD 即使 `flags==0` 也必须带 `TAG_FLAGS`。与官方 Part 1 摘要一致。这是实现约束，不是本轮三项之一。
+15. 响应解密 AAD 的 `TAG_COUNTER` 必须用响应自身的 `AES_GCM_Response_data.counter`，并且必须先完整校验 GCM tag 再入窗。yoziru v5.2.0 曾误用请求 counter、漏验 tag，至 v6.0.0 / 0Bu patch 0006 才修。与官方 A12 一致。该 Word 报告的 P-02 采信。
+16. 不要在 BLE 收流上做启发式找帧头；长度非法或超过 1024 就丢弃复位。连上后要丢掉匹配不到本端 routing address 的 31/41 字节被动认证帧（官方 Issue #390；该报告 P-05）。作为后续嵌入式避开项保留，不进本轮三项。
+17. 官方维护者在 Issue #368 确认：车辆不是 AWAKE 时，`BodyControllerState` 的充电口状态会恒报关闭，部分字段只是休眠前的锁存。界面不得把这时的「关闭」当成当前插枪或开关真相。这是后续 UI 规则，不进本轮三项（本轮只改省略锁态）。
+18. Issue #366：显式唤醒之后不要立刻去握手 Infotainment，车端未就绪可能返回 Fault 11 或一直等到超时；休眠期 Infotainment 握手失败，也不应拆掉仍可用的 BLE。等待步长属于 C，日后实车标定，不进本轮。
+19. 不要因为远端 VCSEC 故障或错误文本就自动删除、重建本地私钥；随机数失败必须 fail-closed。与 0Bu 指南 / patch 0007 及上面第 9 条一致。存储事务和公钥绑定是后续项，不重开本轮 NVS 方案（见 R6）。
+20. 不要照搬 0Bu 或 TeslaBleHttpProxy 默认的 Charging Manager 角色。官方角色见 A30。Passport 若要门锁和前后备箱，必须按产品最小必要权限选角色。这是配对约束，不进本轮三项。
+21. 该 Word 报告的 WAK-06 与官方复审一致：为读状态不得隐式唤醒，打开页面默认只走 VCSEC。这一点采信，并用来对照 R1——DeepSeek 把状态页一次唤醒当成可接受策略，这份报告没有沿用那个错误。
+
+
 ## 3.2 不采信或降级（必须保留，避免再被当规范）
 
 ### R1. 打开状态页时唤醒一次，属于可接受的产品策略
@@ -781,7 +794,7 @@ Do not adopt: a domain-level response window, “reject counter 0,” window wid
 
 ### R3. 把「命令结束后必须断开 BLE / 15 秒硬超时后 `ble_gap_terminate`」写成官方要求
 
-出现位置：cite 风格长报告 1.4、2.4、5.1 第 07 条。
+出现位置：cite 风格长报告 1.4、2.4、5.1 第 07 条；Word 只读清单的 BLE-04、P-08、5.1「用完断开」表述（详见 R13）。
 
 不采信原因：车端 VCSEC 最多约 3 个并发 BLE 连接，是官方事实（本清单 A21，issue 469）。挂起不释放会占槽，三方 Docker 超时杀进程是 B 类教训，可以记。但官方没有要求钥匙客户端每做完一个动作就断开，也没有规定 15 秒硬超时。Passport 是钥匙，保持连接可以是产品策略。不得把「用完必断」写进共识当官方义务，也不纳入本轮修复。
 
@@ -811,7 +824,7 @@ Do not adopt: a domain-level response window, “reject counter 0,” window wid
 
 ### R8. 把 7 s、660 s、5 s、15 s、30 s 等定时写成官方规范
 
-出现位置：若干三方摘要把实战定时与官方 BLE 1 s / 4 s 写在一起；cite 报告的 15 s 断连；local-control / yoziru 的 660 s。
+出现位置：若干三方摘要把实战定时与官方 BLE 1 s / 4 s 写在一起；cite 报告的 15 s 断连；local-control / yoziru 的 660 s；Word 只读清单 5.1 把「彻底禁用后台定时轮询」写成可直接采用的基线。
 
 不采信为 A：官方有依据的定时主要是 BLE 分块 1 s、官方 BLE 客户端会话信息年龄 4 s、最大帧 1024。7 s 唤醒沉降、660 s 休眠轮询下限、5 s 命令预算、15 s 断连都是 C 或 B 的产品/三方政策，可参考，不得标官方。
 
@@ -839,6 +852,30 @@ Do not adopt: a domain-level response window, “reject counter 0,” window wid
 
 不采信其引用形式作为核验依据：其中与官方原文一致的规则可以保留，但核验必须回到 `vehicle-command` 活对象上的路径与行号（以本文件 Part 1 与 v4-pro 带行号的条目为准）。转写增补、升格或省略处，以本不采信表为准。
 
+### R13. 把「按需短连、用完即断」和各 BLE 步骤后的强制断开写成可直接落地的官方基线
+
+出现位置：Word 只读清单 BLE-04、P-08、5.1 第 2 条。
+
+不采信为官方义务：与 R3 相同。车端最多约 3 个并发 BLE 连接是官方事实；iPad 等占满槽位后会表现为「唤不醒」，以及底层连接挂死需要硬超时，这些是该报告和 tesla_ble_mqtt_docker / TeslaBleHttpProxy 的 B 类教训，可以记。但官方没有要求钥匙每做完一个动作就断开，也没有规定空闲断连秒数。该报告自己在 5.2 也把空闲断连时长列为待实车标定的 C。Passport 保持连接可以是产品策略。本轮不改连接策略。
+
+### R14. 因为这份报告没读到 `session.go` / `ble.go`，就把官方窗口宽度 32 或最大帧 1024 B 降回「仍待复核」
+
+出现位置：Word 只读清单开篇边界、WIN-04、CNF-03、5.2。
+
+不采信其降级：报告对自己未直读的源码保持谨慎是对的，但本文件 Part 1 已由官方云端按 `vehicle-command` 活对象把窗口宽度 32 记为 A；1024 B 也已在官方对照中对齐。不得用这份未读到的边界，否定已经核过的官方值。本轮仍然不改产品窗口宽度 64。
+
+### R15. 因为当时读不到产品仓，就把「`1377473` 尚未核对与规范的差距」当成对我们仍然开放的未知
+
+出现位置：Word 只读清单开篇、5.2 第一条。
+
+不采信为当前状态：该报告确实没读到产品代码，所以它不能对 `1377473` 的 C 实现下结论。我们这边已有首次独审 PASS（[bc-e5fb9eb2](https://cursor.com/agents/bc-e5fb9eb2-8183-58be-bf29-93cd3379d170)）和按本清单的复审 FAIL（[bc-d18ff0ed](https://cursor.com/agents/bc-d18ff0ed-5706-54e9-8317-e91b47fc82dc)）。当前差距以本文件「本轮产品差距与修复范围」为准，不要再用「仓库不可访问」把三项修复说成还没对照过。
+
+### R16. 把 5.1「已核实可直接采用、可直接落地编码」整节当作合入门禁
+
+出现位置：Word 只读清单第 5.1 节；该节导出文本还夹杂了损坏的 `[cite:]` 标记。5.2 把过长 TTL 写成 Fault 209。
+
+不采信其整节效力：与官方一致的条目已经分别采信。混入的「用完断开」「彻底禁用后台定时轮询」不得当官方门禁，见 R13、R2、R8。核验仍须回到仓库路径与本文件 Part 1 的行号，不能靠文末编号或损坏的 cite 标记。过长 TTL 对应的官方枚举是 `TIME_TO_LIVE_TOO_LONG`（20），209 是笔误，不得当新的故障码。
+
 ## 3.3 DeepSeek flash 相对 v4-pro 的勘误（采信 v4-pro）
 
 以后若只看到 flash 版，以下以 v4-pro 及本裁决为准：
@@ -852,6 +889,7 @@ Do not adopt: a domain-level response window, “reject counter 0,” window wid
 ## 3.4 不要做的事（给后续智能体）
 
 - 不要用三方报告替换官方独审，也不要用本文件替换对具体提交的官方代码复审。
-- 不要把 R1–R12 的不采信结论再写回实现提示词，当作要做的新功能。
+- 不要把 R1–R16 的不采信结论再写回实现提示词，当作要做的新功能。
 - 不要在本轮修改窗口宽度、域窗口回退、NVS 方案、命令结束断连，或引入 yoziru 运行时。
+- 不要因为某份报告没读到 `session.go`，就否定官方窗口宽度 32 已经核实。
 - 不要改 `main` 或 `feature/tesla-key`，不要刷机，除非用户另行明确授权。
