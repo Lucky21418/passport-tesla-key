@@ -50,6 +50,17 @@
   3. 清点此前官方独审中仍未关闭且不依赖真机的低优先级项，按严重度从高到低一次一项修复、主机测试并普通推送；若无则写明结束。
   4. 禁区与硬停止：不做仓库大扫除、不合并 `main` / `feature/tesla-key`、不重开解耦架构、不改 Option E、不刷机、不实车；遇需真机/审批/安全不确定则标 `NEED_HUMAN` 并跳过。
 
+### BLE 与车端协议交互共识（2026-11-25 裁决，可执行约束）
+
+1. **请求/响应计数器分离与每请求防重放窗口**：请求计数器与响应计数器分开；响应防重放窗口按**同一条请求（`req_id`）**建立，第一条响应 `counter` 可以是 `0`，同请求重用拒绝；官方客户端窗口宽度为 **32**（不用 64）。严禁按域共享单一响应窗口而把下一条请求的 `counter == 0` 误判为重放。
+2. **VCSEC 单发有界与未知不补发**：VCSEC 同时只发一条指令，单条请求最多收三条回包；未收到回包时车辆可能已执行，不得判成未执行并自动补发。
+3. **显式唤醒与禁止休眠轮询**：唤醒必须使用显式 `RKE_ACTION_WAKE_VEHICLE`；不得为读状态隐式唤醒车辆，也不得对休眠车做 Infotainment 定时轮询。
+4. **proto3 省略字段保护**：proto3 省略 `vehicleLockState` 会按默认值解码成 `UNLOCKED(0)`；该字段未在报文中出现时，不得将车辆显示或判定为已解锁。
+5. **参考资料与外部调参边界**：
+   - 官方协议以 `teslamotors/vehicle-command` 为唯一权威；`FoloToy/ai-passport` 为硬件/BSP 官方基线，不含车机协议；其余三个立项参考仓库仅作已核实的失败经验参考，其中 `yoziru/tesla-ble` 不作生产运行时。
+   - 不写入过期旧印象（如 0Bu 当前 ADR-0005 并未写「拒绝 counter 0」，ADR-0003 已 superseded）。
+   - 三方实现中的超时、660s、7s 等待等仅属调参，不作为本仓规范。
+
 ## 自定义 8 MB 分区布局与烧录已存数据政策
 
 遵循 [`docs/development/engineering/firmware-layout.zh_CN.md`](docs/development/engineering/firmware-layout.zh_CN.md)，本应用采用经过校验的自定义 8 MB [`partitions.csv`](partitions.csv)：

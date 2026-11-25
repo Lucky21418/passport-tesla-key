@@ -50,6 +50,17 @@ Per the user-confirmed Basic Edition workflow update on 2026-11-24, subsequent B
   3. Audit and fix remaining non-device-dependent official low-priority items one by one by severity; if none remain, document and stop.
   4. Hard stops & exclusions: no repo-wide cleanup, no merge to `main` / `feature/tesla-key`, no reopening decoupling architecture, no Option E timing changes, no flashing, no live-vehicle actions; mark `NEED_HUMAN` if blocked on device/approval/security uncertainty.
 
+### BLE & Vehicle Protocol Interaction Consensus (2026-11-25 Adjudication, Executable Constraints)
+
+1. **Separate TX/RX Counters & Per-Request Anti-Replay Window**: Request and response counters are separate; the response anti-replay window is scoped **per request (`req_id`)**. The first response `counter` may be `0`; reusing a counter within the same request is rejected. The official client window width is **32** (do not use 64). Never share a single response window across requests on a domain and reject the next request's `counter == 0` as a replay.
+2. **VCSEC Single In-Flight & No Replay on Unknown**: VCSEC sends only one command at a time and expects at most three response frames per request. When no response arrives, the vehicle may already have executed the command; never treat it as failed/not-sent and auto-resubmit.
+3. **Explicit Wake Only & No Sleep Polling**: Waking the vehicle must use explicit `RKE_ACTION_WAKE_VEHICLE`. Never implicitly wake the vehicle for status reads and never run periodic Infotainment polling against an asleep vehicle.
+4. **proto3 Omitted-Field Guard**: In proto3, an omitted `vehicleLockState` decodes to `UNLOCKED(0)`; when the field is absent on wire, never display or treat the vehicle as unlocked.
+5. **Reference Repositories & Third-Party Tuning Boundary**:
+   - `teslamotors/vehicle-command` is the authoritative protocol reference; `FoloToy/ai-passport` is the official hardware/BSP baseline (no vehicle protocol); the other three initial reference repositories serve only as verified failure lessons, and `yoziru/tesla-ble` is not used as a production runtime.
+   - Do not record outdated impressions (0Bu's current ADR-0005 does not state "reject counter 0", and ADR-0003 is superseded).
+   - Third-party timeouts, 660 s intervals, 7 s waits, etc. are tuning parameters only, not specifications.
+
 ## Custom 8 MB Partition Layout and Flashing / Stored Data Policy
 
 Per [`docs/development/engineering/firmware-layout.md`](docs/development/engineering/firmware-layout.md), this application uses a validated custom 8 MB [`partitions.csv`](partitions.csv):
