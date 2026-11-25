@@ -2,9 +2,9 @@
 """Reproducibly generate the 12 px and 16 px LVGL CJK font subsets in assets/fonts/.
 
 Source font:
-  Adobe Source Han Sans SC Regular (release tag 2.005R, SIL Open Font License 1.1)
-  URL: https://github.com/adobe-fonts/source-han-sans/raw/2.005R/OTF/SimplifiedChinese/SourceHanSansSC-Regular.otf
-  SHA-256: f1d8611151880c6c336aabeac4640ef434fa13cbfbf1ffe82d0a71b2a5637256
+  Adobe Source Han Sans SC Medium (release tag 2.005R, SIL Open Font License 1.1)
+  URL: https://github.com/adobe-fonts/source-han-sans/raw/2.005R/OTF/SimplifiedChinese/SourceHanSansSC-Medium.otf
+  SHA-256: 1df61d31687d04fd2f928a3bb6ca6cd61f0e988cc267cf317f32406edbb49f70
 
 Converter:
   Official lv_font_conv pinned at version 1.5.3
@@ -28,9 +28,9 @@ CHARS_FILE = ASSETS_FONTS_DIR / "app_font_cjk_chars.txt"
 SOURCE_TAG = "2.005R"
 SOURCE_URL = (
     "https://github.com/adobe-fonts/source-han-sans/raw/"
-    f"{SOURCE_TAG}/OTF/SimplifiedChinese/SourceHanSansSC-Regular.otf"
+    f"{SOURCE_TAG}/OTF/SimplifiedChinese/SourceHanSansSC-Medium.otf"
 )
-SOURCE_SHA256 = "f1d8611151880c6c336aabeac4640ef434fa13cbfbf1ffe82d0a71b2a5637256"
+SOURCE_SHA256 = "1df61d31687d04fd2f928a3bb6ca6cd61f0e988cc267cf317f32406edbb49f70"
 PINNED_LV_FONT_CONV_VERSION = "1.5.3"
 
 TARGETS = (

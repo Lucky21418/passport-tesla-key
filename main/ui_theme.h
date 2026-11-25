@@ -26,7 +26,7 @@
 #define COL_TAG_BORDER  0x3A4050
 #define COL_QR_BG       0xFFFFFF
 #define COL_WHITE       0xEEF2F8
-#define COL_MUTED       0x8A90A2
+#define COL_MUTED       0xA8B0C2
 #define COL_ALERT       0xE82127
 #define COL_ARC_TRACK   0x232733
 #define COL_ARC_IND     0xC8CDD8
