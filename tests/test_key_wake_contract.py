@@ -38,6 +38,9 @@ class KeyWakeGuardWiringTest(unittest.TestCase):
         self.assertIn("bsp_button_init(NULL, NULL)", self.main)
         guard_body = function_body(self.main, "poll_key_wake_guard")
         self.assertIn("key_guard_consume(", guard_body)
+        self.assertIn("app_ports_pop_button_sample(", guard_body)
+        self.assertLess(guard_body.index("app_ports_pop_button_sample("),
+                        guard_body.index("bsp_button_read_mv("))
         main_body = function_body(self.main, "app_main")
         self.assertLess(main_body.index("poll_key_wake_guard()"),
                         main_body.index("pk_btn_adapter_feed_mv("))

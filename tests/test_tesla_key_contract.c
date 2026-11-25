@@ -10,6 +10,7 @@
 #include "pk_btn_adapter.h"
 #include "pk_protocol.h"
 #include "pk_store.h"
+#include "../main/key_guard.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -3157,6 +3158,109 @@ static void test_double_click_option_e_regressions(void)
     }
 }
 
+static void drain_ring_with_wake_guard(key_guard_t *guard, pk_btn_sample_ring_t *ring,
+                                       pk_btn_adapter_t *btn, pk_app_t *app,
+                                       int live_mv, pk_ms_t live_now_ms)
+{
+    pk_btn_sample_t samp;
+    bool drained = false;
+
+    while (guard->armed && pk_btn_ring_pop(ring, &samp)) {
+        bool released = (samp.valid && samp.mv >= PK_BTN_MV_RELEASED_MIN);
+        drained = true;
+        (void)key_guard_consume(guard, released, (int64_t)samp.ts_ms * 1000);
+    }
+    if (!drained && guard->armed) {
+        bool released = (live_mv >= PK_BTN_MV_RELEASED_MIN);
+        (void)key_guard_consume(guard, released, (int64_t)live_now_ms * 1000);
+    }
+    while (pk_btn_ring_pop(ring, &samp)) {
+        if (guard->armed) {
+            bool released = (samp.valid && samp.mv >= PK_BTN_MV_RELEASED_MIN);
+            (void)key_guard_consume(guard, released, (int64_t)samp.ts_ms * 1000);
+            continue;
+        }
+        (void)pk_btn_adapter_feed_mv(btn, samp.ts_ms, samp.mv, samp.valid);
+    }
+    (void)pk_app_tick(app, live_now_ms);
+}
+
+static void test_deep_sleep_wake_guard_ring_replay(void)
+{
+    pk_app_t app;
+    pk_ble_adapter_t ad;
+    pk_btn_adapter_t btn;
+    pk_btn_sample_ring_t ring;
+    key_guard_t guard;
+    pk_ms_t t;
+
+    /* 1. Disconnected with saved car: key held during bsp_button_init(), then
+     * released within the last 320 ms before main loop starts. Ring holds
+     * historical press + release; live ADC already reads 2950 mV (released).
+     * Guard must swallow historical press+release and NOT trigger reconnect. */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    pk_app_set_connected(&app, false);
+    pk_app_cancel_reconnect(&app);
+    app.page = PK_PAGE_MAIN;
+    pk_btn_ring_init(&ring);
+    memset(&guard, 0, sizeof(guard));
+    key_guard_arm(&guard, 1000LL * 1000, 10000LL * 1000);
+    key_guard_sync_released(&guard, false); /* still held at bsp_button_init */
+
+    for (t = 1100u; t < 1250u; t += 5u) {
+        (void)pk_btn_ring_push(&ring, t, 303, true);
+    }
+    for (t = 1250u; t < 1300u; t += 5u) {
+        (void)pk_btn_ring_push(&ring, t, 2950, true);
+    }
+    drain_ring_with_wake_guard(&guard, &ring, &btn, &app, 2950, 1300u);
+    (void)pk_app_tick(&app, 1700u); /* past 300 ms single-click deadline */
+    expect(!guard.armed && !app.reconnect.active && app.page == PK_PAGE_MAIN &&
+           !app.keys.deadline_valid && g_cap_writes == 0,
+           "wake-guard: pre-loop release in ring does not replay click or reconnect");
+
+    /* 2. Connected with saved car: same pre-loop press + release in ring must
+     * NOT commit a main-screen LOCK/UNLOCK write. */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    pk_btn_ring_init(&ring);
+    memset(&guard, 0, sizeof(guard));
+    key_guard_arm(&guard, 1000LL * 1000, 10000LL * 1000);
+    key_guard_sync_released(&guard, false);
+
+    for (t = 1100u; t < 1250u; t += 5u) {
+        (void)pk_btn_ring_push(&ring, t, 303, true);
+    }
+    for (t = 1250u; t < 1300u; t += 5u) {
+        (void)pk_btn_ring_push(&ring, t, 2950, true);
+    }
+    drain_ring_with_wake_guard(&guard, &ring, &btn, &app, 2950, 1300u);
+    (void)pk_app_tick(&app, 1700u);
+    expect(!guard.armed && g_cap_writes == 0 && app.page == PK_PAGE_MAIN,
+           "wake-guard: pre-loop release in ring does not commit main-screen action");
+
+    /* 3. Still held entering main loop: guard stays armed, swallows held
+     * samples, and disarms cleanly on subsequent release without emitting click. */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    pk_btn_ring_init(&ring);
+    memset(&guard, 0, sizeof(guard));
+    key_guard_arm(&guard, 1000LL * 1000, 10000LL * 1000);
+    key_guard_sync_released(&guard, false);
+
+    for (t = 1100u; t < 1250u; t += 5u) {
+        (void)pk_btn_ring_push(&ring, t, 303, true);
+    }
+    drain_ring_with_wake_guard(&guard, &ring, &btn, &app, 303, 1250u);
+    expect(guard.armed && g_cap_writes == 0,
+           "wake-guard: still-held wake key stays armed");
+    for (t = 1255u; t < 1310u; t += 5u) {
+        (void)pk_btn_ring_push(&ring, t, 2950, true);
+    }
+    drain_ring_with_wake_guard(&guard, &ring, &btn, &app, 2950, 1310u);
+    (void)pk_app_tick(&app, 1700u);
+    expect(!guard.armed && g_cap_writes == 0 && app.page == PK_PAGE_MAIN,
+           "wake-guard: subsequent release disarms without emitting click");
+}
+
 int main(void)
 {
     test_unwired_not_success();
@@ -3208,6 +3312,7 @@ int main(void)
     test_plaintext_vehicledata_parses_to_p();
     test_sentry_idle_and_defrost_mode();
     test_double_click_option_e_regressions();
+    test_deep_sleep_wake_guard_ring_replay();
     if (g_fail) {
         fprintf(stderr, "%d contract check(s) failed\n", g_fail);
         return 1;

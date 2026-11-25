@@ -53,17 +53,31 @@ static pk_ms_t now_ms(void)
     return (pk_ms_t)(esp_timer_get_time() / 1000);
 }
 
-static void poll_key_wake_guard(void)
+static bool poll_key_wake_guard(void)
 {
+    pk_btn_sample_t samp;
+    bool drained = false;
+
     if (!s_key_guard.armed) {
-        return;
+        return false;
     }
-    const int mv = bsp_button_read_mv();
-    const bool released = (mv >= PK_BTN_MV_RELEASED_MIN);
-    if (key_guard_consume(&s_key_guard, released, esp_timer_get_time()) &&
-        !s_key_guard.armed) {
-        ESP_LOGI(TAG, "唤醒键已松手，按键恢复响应");
+    while (s_key_guard.armed && app_ports_pop_button_sample(&samp)) {
+        const bool released = (samp.valid && samp.mv >= PK_BTN_MV_RELEASED_MIN);
+        drained = true;
+        if (key_guard_consume(&s_key_guard, released, (int64_t)samp.ts_ms * 1000) &&
+            !s_key_guard.armed) {
+            ESP_LOGI(TAG, "唤醒键已松手，按键恢复响应");
+        }
     }
+    if (!drained && s_key_guard.armed) {
+        const int mv = bsp_button_read_mv();
+        const bool released = (mv >= PK_BTN_MV_RELEASED_MIN);
+        if (key_guard_consume(&s_key_guard, released, esp_timer_get_time()) &&
+            !s_key_guard.armed) {
+            ESP_LOGI(TAG, "唤醒键已松手，按键恢复响应");
+        }
+    }
+    return drained;
 }
 
 static uint8_t effective_backlight_percent(const pk_app_t *app)
@@ -165,7 +179,7 @@ void app_main(void)
             app_ports_set_screen_awake(false);
         }
 
-        poll_key_wake_guard();
+        drained_any = poll_key_wake_guard();
         while (app_ports_pop_button_sample(&samp)) {
             drained_any = true;
             key_pressed = (samp.valid && samp.mv >= 0 && samp.mv < PK_BTN_MV_RELEASED_MIN);
