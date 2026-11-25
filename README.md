@@ -60,6 +60,7 @@ Per the user-confirmed Basic Edition workflow update on 2026-11-24, subsequent B
    - `teslamotors/vehicle-command` is the authoritative protocol reference; `FoloToy/ai-passport` is the official hardware/BSP baseline (no vehicle protocol); the other three initial reference repositories serve only as verified failure lessons, and `yoziru/tesla-ble` is not used as a production runtime.
    - Do not record outdated impressions (0Bu's current ADR-0005 does not state "reject counter 0", and ADR-0003 is superseded).
    - Third-party timeouts, 660 s intervals, 7 s waits, etc. are tuning parameters only, not specifications.
+   - The full verified checklist (official items, third-party pitfalls, and third-party conclusions the coordinator rejected) is in [`docs/specs/vehicle-interaction-protocol-checklist.md`](docs/specs/vehicle-interaction-protocol-checklist.md). The five executable constraints in this section remain authoritative; rejected items must not be written back here as official requirements.
 
 ## Custom 8 MB Partition Layout and Flashing / Stored Data Policy
 

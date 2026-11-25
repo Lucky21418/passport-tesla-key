@@ -60,6 +60,7 @@
    - 官方协议以 `teslamotors/vehicle-command` 为唯一权威；`FoloToy/ai-passport` 为硬件/BSP 官方基线，不含车机协议；其余三个立项参考仓库仅作已核实的失败经验参考，其中 `yoziru/tesla-ble` 不作生产运行时。
    - 不写入过期旧印象（如 0Bu 当前 ADR-0005 并未写「拒绝 counter 0」，ADR-0003 已 superseded）。
    - 三方实现中的超时、660s、7s 等待等仅属调参，不作为本仓规范。
+   - 完整核实清单（含官方条目、三方已踩坑，以及总管不采信的三方结论）见 [`docs/specs/vehicle-interaction-protocol-checklist.md`](docs/specs/vehicle-interaction-protocol-checklist.md)。五点可执行约束以本节为准；不采信条目不得再写回本节当官方要求。
 
 ## 自定义 8 MB 分区布局与烧录已存数据政策
 
