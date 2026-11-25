@@ -65,13 +65,11 @@ static void expire_pending(pk_app_t *app)
                                            PK_ACTION_VCSEC_GET_STATUS_ONCE,
                                            app->pending.deadline);
             if (rc != PK_OK) {
+                /* The unlock may already have run. A failed follow-up read
+                 * is unconfirmed, not a reason to forget the last lock. */
                 pk_ble_release_in_flight(app);
                 app->has_pending = false;
                 pk_app_set_busy(app, false);
-                app->vcsec_status_valid = false;
-                app->vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
-                app->vcsec_reconcile_attempts = 0u;
-                app->vcsec_reconcile_next_ms = 0u;
                 pk_app_set_msg(app, PK_MSG_CMD_UNCONFIRMED);
             }
         }
@@ -97,8 +95,7 @@ static void expire_pending(pk_app_t *app)
     } else if (kind == PK_PENDING_LOCK_VERIFY) {
         app->has_deferred = false;
         app->intent_deadline = 0;
-        app->vcsec_status_valid = false;
-        app->vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
+        /* No VehicleStatus arrived. Keep the last confirmed lock. */
         pk_app_set_msg(app, PK_MSG_LOCK_UNCONFIRMED);
         pk_app_present_modal(app, PK_PAGE_RESULT);
         app->lock_fsm = PK_LOCK_FSM_RESULT;
@@ -113,12 +110,8 @@ static void expire_pending(pk_app_t *app)
             pk_app_set_msg(app, PK_MSG_WAKE_TIMEOUT);
         } else if (kind == PK_PENDING_UNLOCK_VERIFY ||
                    (kind == PK_PENDING_COMMAND && app->pending.action == PK_ACTION_UNLOCK)) {
-            /* Symmetric with LOCK timeout: do not keep the pre-unlock LOCKED
-             * snapshot, which would leave pk_app_primary() stuck on UNLOCK. */
-            app->vcsec_status_valid = false;
-            app->vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
-            app->vcsec_reconcile_attempts = 0u;
-            app->vcsec_reconcile_next_ms = 0u;
+            /* No reply does not prove the car ignored the command. Keep the
+             * last confirmed lock and report the result unconfirmed. */
             pk_app_set_msg(app, (kind == PK_PENDING_UNLOCK_VERIFY) ? PK_MSG_CMD_UNCONFIRMED
                                                                     : PK_MSG_CMD_TIMEOUT);
         } else {

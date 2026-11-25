@@ -186,7 +186,10 @@ bool pk_app_lock_packet(pk_app_t *app, const pk_lock_packet_t *pkt)
         lock_msg = PK_MSG_LOCK_UNCONFIRMED;
     }
 
-    if (pkt->complete && pkt->adapter_verified) {
+    /* An omitted or unknown lock is not a new observation. Do not replace
+     * a confirmed lock with the proto3 UNLOCKED default. */
+    if (pkt->complete && pkt->adapter_verified &&
+        pkt->lock != PK_LOCK_READ_UNKNOWN) {
         app->vcsec_status_valid = true;
         app->vcsec_lock_state = pkt->lock;
     }

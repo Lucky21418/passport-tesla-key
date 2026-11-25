@@ -300,24 +300,24 @@ static void test_wake_budget(void)
     boot(&app, &ad);
     app.vcsec_status_valid = true;
     app.vcsec_asleep = true;
+    app.vcsec_lock_state = PK_LOCK_READ_LOCKED;
     pk_app_open_status(&app, PK_ORIGIN_LIST);
-    expect(g_wakes == 1 && app.pending.kind == PK_PENDING_WAKE_THEN, "N09: one wake to view");
-    app.pending.qphase = 1;
-    app.pending.deadline = app.now;
-    pk_app_tick(&app, app.now);
-    expect(g_wakes == 1 && app.pending.kind == PK_PENDING_STATUS, "N09: settle reads, it does not wake again");
+    expect(g_wakes == 0 && app.pending.kind == PK_PENDING_STATUS &&
+           app.pending.action == PK_ACTION_STATUS_READ &&
+           !app.wake_spent && app.vcsec_lock_state == PK_LOCK_READ_LOCKED,
+           "N09: opening status while asleep does not send WAKE_VEHICLE");
     wakes = g_wakes;
-    app.vcsec_status_valid = true;
-    app.vcsec_asleep = true;
     pk_app_open_status(&app, PK_ORIGIN_LIST);
-    expect(g_wakes == wakes && app.pending.action != PK_ACTION_VCSEC_WAKE_ONCE,
-           "N09: status re-entry does not buy another wake");
+    expect(g_wakes == wakes && app.pending.kind == PK_PENDING_STATUS &&
+           app.pending.action != PK_ACTION_VCSEC_WAKE_ONCE,
+           "N09: status re-entry does not buy a wake");
     pk_app_set_connected(&app, false);
     pk_app_set_connected(&app, true);
     app.vcsec_status_valid = true;
     app.vcsec_asleep = true;
     pk_app_open_status(&app, PK_ORIGIN_LIST);
-    expect(g_wakes == wakes, "N09: reconnect does not reset the status wake budget");
+    expect(g_wakes == wakes && app.pending.action != PK_ACTION_VCSEC_WAKE_ONCE,
+           "N09: reconnect does not add a status wake");
 }
 
 static void test_qualification_and_motion(void)
@@ -685,17 +685,14 @@ static void spend_status_wake(pk_app_t *app, pk_ble_adapter_t *ad)
     app->vcsec_status_valid = true;
     app->vcsec_asleep = true;
     pk_app_open_status(app, PK_ORIGIN_LIST);
-    expect(g_wakes == 1 && app->pending.kind == PK_PENDING_WAKE_THEN &&
-           app->wake_owner == PK_WAKE_OWNER_STATUS && app->wake_spent,
-           "guard setup: one status wake");
-    app->pending.qphase = 1;
-    app->pending.deadline = app->now;
-    pk_app_tick(app, app->now);
+    expect(g_wakes == 0 && app->pending.kind == PK_PENDING_STATUS &&
+           app->pending.action != PK_ACTION_VCSEC_WAKE_ONCE && !app->wake_spent,
+           "guard setup: status open does not wake");
     pk_app_exit_status(app);
-    expect(g_wakes == 1 && !app->has_pending && !app->has_deferred &&
-           app->wake_owner == PK_WAKE_OWNER_STATUS && app->wake_spent &&
+    expect(g_wakes == 0 && !app->has_pending && !app->has_deferred &&
+           app->wake_owner == PK_WAKE_OWNER_NONE && !app->wake_spent &&
            app->page != PK_PAGE_STATUS,
-           "guard setup: leaving status keeps the spent wake");
+           "guard setup: leaving status does not leave a spent wake");
 }
 
 static void grant_park(pk_app_t *app)
@@ -735,82 +732,82 @@ static void test_guard_rejection_keeps_wake(void)
     deadline = app.intent_deadline;
     tend(&app);
     expect_guard_keeps(&app, PK_ACTION_UNLOCK, PK_MSG_MOVING,
-                       PK_WAKE_OWNER_STATUS, true, deadline, 1,
-                       "guard: moving UNLOCK does not reset a spent status wake");
+                       PK_WAKE_OWNER_NONE, false, deadline, 0,
+                       "guard: moving UNLOCK does not create a status wake");
     app.vcsec_status_valid = true;
     app.vcsec_asleep = true;
     pk_app_open_status(&app, PK_ORIGIN_LIST);
-    expect(g_wakes == 1 && app.pending.action != PK_ACTION_VCSEC_WAKE_ONCE,
+    expect(g_wakes == 0 && app.pending.action != PK_ACTION_VCSEC_WAKE_ONCE,
            "guard: moving UNLOCK does not create another status wake");
 
     spend_status_wake(&app, &ad);
     deadline = app.intent_deadline;
     tend(&app);
     expect_guard_keeps(&app, PK_ACTION_FRUNK_OPEN, PK_MSG_MOVING,
-                       PK_WAKE_OWNER_STATUS, true, deadline, 1,
-                       "guard: moving closure does not reset a spent status wake");
+                       PK_WAKE_OWNER_NONE, false, deadline, 0,
+                       "guard: moving closure does not create a status wake");
 
     spend_status_wake(&app, &ad);
     deadline = app.intent_deadline;
     app.paired = false;
     expect_guard_keeps(&app, PK_ACTION_LOCK, PK_MSG_NOT_PAIRED,
-                       PK_WAKE_OWNER_STATUS, true, deadline, 1,
-                       "guard: unpaired LOCK does not reset a spent status wake");
+                       PK_WAKE_OWNER_NONE, false, deadline, 0,
+                       "guard: unpaired LOCK does not create a status wake");
 
     spend_status_wake(&app, &ad);
     deadline = app.intent_deadline;
     app.caps.action[PK_ACTION_CLIMATE_ON] = PK_CAP_NO;
     expect_guard_keeps(&app, PK_ACTION_CLIMATE_ON, PK_MSG_CAPABILITY,
-                       PK_WAKE_OWNER_STATUS, true, deadline, 1,
-                       "guard: capability refusal does not reset a spent status wake");
+                       PK_WAKE_OWNER_NONE, false, deadline, 0,
+                       "guard: capability refusal does not create a status wake");
 
     spend_status_wake(&app, &ad);
     deadline = app.intent_deadline;
     app.caps.climate_on = PK_CAP_NO;
     app.caps.keeper_on = PK_CAP_NO;
     expect_guard_keeps(&app, PK_ACTION_SET_SEAT_HEAT, PK_MSG_NEED_CLIMATE,
-                       PK_WAKE_OWNER_STATUS, true, deadline, 1,
-                       "guard: seat-heat refusal does not reset a spent status wake");
+                       PK_WAKE_OWNER_NONE, false, deadline, 0,
+                       "guard: seat-heat refusal does not create a status wake");
 
     spend_status_wake(&app, &ad);
     grant_park(&app);
-    expect(app.wake_owner == PK_WAKE_OWNER_STATUS && app.wake_spent && g_wakes == 1,
-           "guard setup: park read keeps the status wake");
+    expect(app.wake_owner == PK_WAKE_OWNER_NONE && !app.wake_spent && g_wakes == 0,
+           "guard setup: park read does not add a status wake");
     deadline = app.intent_deadline;
     app.caps.cable_connected = PK_CAP_YES;
     expect_guard_keeps(&app, PK_ACTION_CHARGE_PORT_CLOSE, PK_MSG_CABLE,
-                       PK_WAKE_OWNER_STATUS, true, deadline, 1,
-                       "guard: cable refusal does not reset a spent status wake");
+                       PK_WAKE_OWNER_NONE, false, deadline, 0,
+                       "guard: cable refusal does not create a status wake");
 
     spend_status_wake(&app, &ad);
     grant_park(&app);
     deadline = app.intent_deadline;
     app.caps.car_wash = PK_CAP_YES;
     expect_guard_keeps(&app, PK_ACTION_CHARGE_PORT_OPEN, PK_MSG_CAR_WASH,
-                       PK_WAKE_OWNER_STATUS, true, deadline, 1,
-                       "guard: car-wash refusal does not reset a spent status wake");
+                       PK_WAKE_OWNER_NONE, false, deadline, 0,
+                       "guard: car-wash refusal does not create a status wake");
 
     spend_status_wake(&app, &ad);
     pk_app_set_connected(&app, false);
-    expect(app.wake_owner == PK_WAKE_OWNER_STATUS && app.wake_spent && g_wakes == 1,
-           "guard setup: disconnect keeps the spent status wake");
+    expect(app.wake_owner == PK_WAKE_OWNER_NONE && !app.wake_spent && g_wakes == 0,
+           "guard setup: disconnect does not invent a status wake");
     deadline = app.intent_deadline;
     expect_guard_keeps(&app, PK_ACTION_LOCK, PK_MSG_RECONNECT_FIRST,
-                       PK_WAKE_OWNER_STATUS, true, deadline, 1,
-                       "guard: reconnect refusal does not reset a spent status wake");
+                       PK_WAKE_OWNER_NONE, false, deadline, 0,
+                       "guard: reconnect refusal does not create a status wake");
     pk_app_set_connected(&app, true);
     app.vcsec_status_valid = true;
     app.vcsec_asleep = true;
     pk_app_open_status(&app, PK_ORIGIN_LIST);
-    expect(g_wakes == 1 && app.pending.action != PK_ACTION_VCSEC_WAKE_ONCE,
+    expect(g_wakes == 0 && app.pending.action != PK_ACTION_VCSEC_WAKE_ONCE,
            "guard: reconnect refusal does not create another status wake");
 
     spend_status_wake(&app, &ad);
     deadline = app.intent_deadline;
     app.busy = true;
     expect_guard_keeps(&app, PK_ACTION_UNLOCK, PK_MSG_BUSY_NO_QUEUE,
-                       PK_WAKE_OWNER_STATUS, true, deadline, 1,
-                       "guard: busy refusal does not reset a spent status wake");
+                       PK_WAKE_OWNER_NONE, false, deadline, 0,
+                       "guard: busy refusal does not create a status wake");
 
     boot(&app, &ad);
     tend(&app);
@@ -899,78 +896,41 @@ static void test_status_wake_deadline(void)
 {
     pk_app_t app;
     pk_ble_adapter_t ad;
-    pk_ms_t total;
     pk_ms_t started;
-    int wakes;
+    pk_intent_t intent;
 
     boot(&app, &ad);
     app.vcsec_status_valid = true;
     app.vcsec_asleep = true;
+    app.vcsec_lock_state = PK_LOCK_READ_LOCKED;
     started = app.now;
     pk_app_open_status(&app, PK_ORIGIN_LIST);
-    total = app.pending.deadline;
-    expect(g_wakes == 1 && app.pending.kind == PK_PENDING_WAKE_THEN &&
-           total == started + PK_WAKE_THEN_READ_MS && app.intent_deadline == total,
-           "status: wake freezes the original 16000 ms total");
+    expect(g_wakes == 0 && !app.wake_spent && !app.wake_then_status &&
+           app.pending.kind == PK_PENDING_STATUS &&
+           app.pending.action == PK_ACTION_STATUS_READ &&
+           app.pending.deadline == started + PK_STATUS_READ_MS &&
+           app.vcsec_lock_state == PK_LOCK_READ_LOCKED,
+           "status: known-asleep open reads status and does not wake");
     pk_app_open_status(&app, PK_ORIGIN_LIST);
-    expect(g_wakes == 1 && app.pending.kind == PK_PENDING_WAKE_THEN &&
-           app.pending.deadline == total && app.intent_deadline == total,
-           "status: reentry during the wake does not extend the total");
-
-    app.now = total - 500u;
-    app.pending.qphase = 1;
-    app.pending.deadline = app.now;
-    pk_app_tick(&app, app.now);
-    expect(g_wakes == 1 && app.pending.kind == PK_PENDING_STATUS &&
-           app.pending.deadline <= total &&
-           app.pending.deadline != app.now + PK_STATUS_READ_MS,
-           "status: read continuation cannot pass the original total");
-
-    boot(&app, &ad);
-    app.vcsec_status_valid = true;
-    app.vcsec_asleep = true;
-    pk_app_open_status(&app, PK_ORIGIN_LIST);
-    total = app.pending.deadline;
-    wakes = g_wakes;
-    app.pending.qphase = 1;
-    app.pending.deadline = total;
-    pk_app_tick(&app, total);
-    expect(g_wakes == wakes &&
-           !(app.has_pending && app.pending.deadline > total) &&
-           !(app.has_pending && app.pending.kind == PK_PENDING_WAKE_THEN),
-           "status: expiry at the original total does not extend or wake again");
-
-    boot(&app, &ad);
-    app.vcsec_status_valid = true;
-    app.vcsec_asleep = true;
-    pk_app_open_status(&app, PK_ORIGIN_LIST);
-    total = app.pending.deadline;
-    app.pending.qphase = 1;
-    app.pending.deadline = app.now;
-    pk_app_tick(&app, app.now);
-    pk_app_exit_status(&app);
-    app.now = total - 500u;
-    pk_app_open_status(&app, PK_ORIGIN_LIST);
-    expect(g_wakes == 1 && app.wake_owner == PK_WAKE_OWNER_STATUS && app.wake_spent &&
-           app.pending.kind == PK_PENDING_STATUS && app.pending.deadline <= total &&
-           app.pending.action != PK_ACTION_VCSEC_WAKE_ONCE,
-           "status: reentry inside the window does not extend or wake again");
-
-    boot(&app, &ad);
-    app.vcsec_status_valid = true;
-    app.vcsec_asleep = true;
-    pk_app_open_status(&app, PK_ORIGIN_LIST);
-    total = app.pending.deadline;
-    app.now = total - 500u;
-    pk_app_set_connected(&app, false);
-    pk_app_set_connected(&app, true);
-    app.vcsec_status_valid = true;
-    app.vcsec_asleep = true;
-    pk_app_open_status(&app, PK_ORIGIN_LIST);
-    expect(g_wakes == 1 && app.wake_spent && app.wake_owner == PK_WAKE_OWNER_STATUS &&
+    expect(g_wakes == 0 && app.pending.kind == PK_PENDING_STATUS &&
            app.pending.action != PK_ACTION_VCSEC_WAKE_ONCE &&
-           (!app.has_pending || app.pending.deadline <= total),
-           "status: reconnect does not extend the total or buy another wake");
+           app.pending.deadline == started + PK_STATUS_READ_MS,
+           "status: reentry does not send WAKE_VEHICLE");
+
+    boot(&app, &ad);
+    app.vcsec_status_valid = true;
+    app.vcsec_asleep = true;
+    app.page = PK_PAGE_SETTINGS;
+    app.caps.climate_on = PK_CAP_NO;
+    intent = pk_app_make_intent(&app, PK_ACTION_CLIMATE_ON);
+    expect(pk_app_commit(&app, &intent, app.now) && g_wakes == 1 &&
+           app.pending.kind == PK_PENDING_WAKE_THEN && app.has_deferred,
+           "status: an infotainment command still wakes once");
+    pk_app_open_status(&app, PK_ORIGIN_LIST);
+    expect(g_wakes == 1 && app.has_deferred &&
+           app.deferred.action == PK_ACTION_CLIMATE_ON &&
+           app.pending.kind == PK_PENDING_WAKE_THEN,
+           "status: opening status does not clear that command wake");
 }
 
 static void test_role_and_management(void)

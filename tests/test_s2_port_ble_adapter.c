@@ -1034,107 +1034,29 @@ int main(void)
               g_app.pending.deadline != g_app.now + PK_WAKE_SETTLE_MS,
               "D7", "Late wake ACK does not extend the original intent deadline");
 
-        /* D8: a pure status wake has no command intent and still cannot grow. */
+        /* D8: opening status while the car is known asleep is not a wake. */
         setup_connected_slot0(247u, true);
         g_app.vcsec_status_valid = true;
         g_app.vcsec_asleep = true;
-        pk_app_open_status(&g_app, PK_ORIGIN_LIST);
-        original_total = g_app.pending.deadline;
-        check(g_app.pending.kind == PK_PENDING_WAKE_THEN && g_app.pending.qphase == 0 &&
-              original_total == g_app.now + PK_WAKE_THEN_READ_MS &&
-              g_app.wake_owner == PK_WAKE_OWNER_STATUS,
-              "D8", "Status wake arms one original 16000 ms total");
-        g_now_ms = original_total - 1000u;
-        g_app.now = g_now_ms;
-        memset(&wake_ack, 0, sizeof(wake_ack));
-        wake_ack.which_sub_message = VCSEC_FromVCSECMessage_commandStatus_tag;
-        wake_ack.sub_message.commandStatus.operationStatus =
-            VCSEC_OperationStatus_E_OPERATIONSTATUS_OK;
-        vs_ack = pb_ostream_from_buffer(vbuf_ack, sizeof(vbuf_ack));
-        pb_encode(&vs_ack, VCSEC_FromVCSECMessage_fields, &wake_ack);
-        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
-                                   s_wire_txns[0].routing_addr, s_wire_txns[0].uuid,
-                                   vbuf_ack, vs_ack.bytes_written,
-                                   NULL, NULL, false, 0u, false, 0);
-        inject_rx_wire(wire, wlen);
-        check(g_app.pending.kind == PK_PENDING_WAKE_THEN && g_app.pending.qphase == 1 &&
-              g_app.pending.deadline <= original_total &&
-              g_app.pending.deadline != g_app.now + PK_WAKE_SETTLE_MS,
-              "D8", "Late attributed legacy status-wake ACK does not extend 16000 ms");
+        g_app.vcsec_lock_state = PK_LOCK_READ_LOCKED;
         {
-            int gatt_at_ack = g_gatt_write_calls;
-            g_now_ms = original_total;
-            g_app.now = original_total;
-            pk_app_tick(&g_app, original_total);
-            check(g_app.wake_spent && g_app.wake_owner == PK_WAKE_OWNER_STATUS &&
-                  g_gatt_write_calls == gatt_at_ack &&
-                  !(g_app.has_pending && g_app.pending.deadline > original_total) &&
-                  !(g_app.has_pending && g_app.pending.kind == PK_PENDING_WAKE_THEN),
-                  "D8", "Status settle at the original total does not wake or extend");
+            int gatt_before_status = g_gatt_write_calls;
+            pk_app_open_status(&g_app, PK_ORIGIN_LIST);
+            check(g_app.pending.kind == PK_PENDING_STATUS &&
+                  g_app.pending.action == PK_ACTION_STATUS_READ &&
+                  !g_app.wake_spent && !g_app.wake_then_status &&
+                  g_app.vcsec_status_valid &&
+                  g_app.vcsec_lock_state == PK_LOCK_READ_LOCKED &&
+                  g_gatt_write_calls > gatt_before_status,
+                  "D8", "Known-asleep status open reads status and does not wake");
+            original_total = g_app.pending.deadline;
+            pk_app_open_status(&g_app, PK_ORIGIN_LIST);
+            check(g_app.pending.kind == PK_PENDING_STATUS &&
+                  g_app.pending.action != PK_ACTION_VCSEC_WAKE_ONCE &&
+                  !g_app.wake_spent &&
+                  g_app.pending.deadline == original_total,
+                  "D8", "Status reentry does not send WAKE_VEHICLE");
         }
-
-        setup_connected_slot0(247u, true);
-        g_app.vcsec_status_valid = true;
-        g_app.vcsec_asleep = true;
-        pk_app_open_status(&g_app, PK_ORIGIN_LIST);
-        original_total = g_app.pending.deadline;
-        g_now_ms = original_total - 1000u;
-        g_app.now = g_now_ms;
-        memset(&wake_ack, 0, sizeof(wake_ack));
-        wake_ack.which_sub_message = VCSEC_FromVCSECMessage_commandStatus_tag;
-        wake_ack.sub_message.commandStatus.operationStatus =
-            VCSEC_OperationStatus_E_OPERATIONSTATUS_OK;
-        vs_ack = pb_ostream_from_buffer(vbuf_ack, sizeof(vbuf_ack));
-        pb_encode(&vs_ack, VCSEC_FromVCSECMessage_fields, &wake_ack);
-        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
-                                   s_wire_txns[0].routing_addr, s_wire_txns[0].uuid,
-                                   vbuf_ack, vs_ack.bytes_written,
-                                   &port_slot_keys(0)->vcsec, s_wire_txns[0].req_id,
-                                   true, 1u, false, 0);
-        inject_rx_wire(wire, wlen);
-        check(g_app.pending.kind == PK_PENDING_WAKE_THEN && g_app.pending.qphase == 1 &&
-              g_app.pending.deadline <= original_total &&
-              g_app.pending.deadline != g_app.now + PK_WAKE_SETTLE_MS &&
-              g_app.wake_spent,
-              "D8", "Late authenticated status-wake ACK does not extend 16000 ms");
-
-        setup_connected_slot0(247u, true);
-        g_app.vcsec_status_valid = true;
-        g_app.vcsec_asleep = true;
-        pk_app_open_status(&g_app, PK_ORIGIN_LIST);
-        original_total = g_app.pending.deadline;
-        g_now_ms = original_total - 500u;
-        g_app.now = g_now_ms;
-        g_app.pending.qphase = 1;
-        g_app.pending.deadline = g_app.now;
-        pk_app_tick(&g_app, g_app.now);
-        check(g_app.pending.kind == PK_PENDING_STATUS &&
-              g_app.pending.deadline <= original_total &&
-              g_app.pending.deadline != g_app.now + PK_STATUS_READ_MS &&
-              g_app.wake_owner == PK_WAKE_OWNER_STATUS && g_app.wake_spent &&
-              g_app.pending.action != PK_ACTION_VCSEC_WAKE_ONCE,
-              "D8", "Status read continuation cannot pass the original 16000 ms total");
-
-        setup_connected_slot0(247u, true);
-        g_app.vcsec_status_valid = true;
-        g_app.vcsec_asleep = true;
-        pk_app_open_status(&g_app, PK_ORIGIN_LIST);
-        original_total = g_app.pending.deadline;
-        pk_app_open_status(&g_app, PK_ORIGIN_LIST);
-        check(g_app.pending.kind == PK_PENDING_WAKE_THEN &&
-              g_app.pending.deadline == original_total && g_app.wake_spent,
-              "D8", "Status reentry during the wake does not move the total");
-        g_app.now = original_total - 500u;
-        g_now_ms = g_app.now;
-        pk_app_set_connected(&g_app, false);
-        pk_app_set_connected(&g_app, true);
-        g_app.vcsec_status_valid = true;
-        g_app.vcsec_asleep = true;
-        pk_app_open_status(&g_app, PK_ORIGIN_LIST);
-        check(g_app.wake_spent && g_app.wake_owner == PK_WAKE_OWNER_STATUS &&
-              g_app.pending.action != PK_ACTION_VCSEC_WAKE_ONCE &&
-              (!g_app.has_pending || g_app.pending.deadline <= original_total),
-              "D8", "Status reconnect does not extend the total or wake again");
 
         setup_connected_slot0(247u, true);
         g_app.page = PK_PAGE_SETTINGS;
@@ -1409,13 +1331,14 @@ int main(void)
         g_app.vcsec_status_valid = false;
         g_app.vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
 
-        memset(&vm, 0, sizeof(vm));
-        vm.which_sub_message = VCSEC_FromVCSECMessage_vehicleStatus_tag;
-        vm.sub_message.vehicleStatus.vehicleLockState = VCSEC_VehicleLockState_E_VEHICLELOCKSTATE_UNLOCKED;
-        vm.sub_message.vehicleStatus.vehicleSleepStatus = VCSEC_VehicleSleepStatus_E_VEHICLE_SLEEP_STATUS_AWAKE;
-        os = pb_ostream_from_buffer(plain, sizeof(plain));
-        pb_encode(&os, VCSEC_FromVCSECMessage_fields, &vm);
-        plen = os.bytes_written;
+        /* nanopb omits proto3 zero enums, so UNLOCKED(0) is written by hand. */
+        {
+            static const uint8_t unlocked_awake[] = {
+                0x0A, 0x04, 0x10, 0x00, 0x18, 0x01
+            };
+            memcpy(plain, unlocked_awake, sizeof(unlocked_awake));
+            plen = sizeof(unlocked_awake);
+        }
 
         wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
                                    s_wire_txns[0].routing_addr, s_wire_txns[0].uuid,
@@ -1426,6 +1349,10 @@ int main(void)
               "N14", "real AES-GCM passive VCSEC observation updates reported state after txn release");
 
         /* Replay of same counter 55 with different lock state MUST be rejected */
+        memset(&vm, 0, sizeof(vm));
+        vm.which_sub_message = VCSEC_FromVCSECMessage_vehicleStatus_tag;
+        vm.sub_message.vehicleStatus.vehicleSleepStatus =
+            VCSEC_VehicleSleepStatus_E_VEHICLE_SLEEP_STATUS_AWAKE;
         vm.sub_message.vehicleStatus.vehicleLockState = VCSEC_VehicleLockState_E_VEHICLELOCKSTATE_LOCKED;
         os = pb_ostream_from_buffer(plain, sizeof(plain));
         pb_encode(&os, VCSEC_FromVCSECMessage_fields, &vm);
@@ -1483,11 +1410,15 @@ int main(void)
         inject_rx_wire(wire, wlen);
         bool got_a = (g_app.vcsec_status_valid && g_app.vcsec_lock_state == PK_LOCK_READ_LOCKED);
 
-        /* Request B reply ALSO with resp_counter == 0 -> UNLOCKED */
-        vm.sub_message.vehicleStatus.vehicleLockState = VCSEC_VehicleLockState_E_VEHICLELOCKSTATE_UNLOCKED;
-        os = pb_ostream_from_buffer(plain, sizeof(plain));
-        pb_encode(&os, VCSEC_FromVCSECMessage_fields, &vm);
-        plen = os.bytes_written;
+        /* Request B reply ALSO with resp_counter == 0 -> explicit UNLOCKED(0).
+         * nanopb would omit that zero and the car would keep LOCKED. */
+        {
+            static const uint8_t unlocked_awake[] = {
+                0x0A, 0x04, 0x10, 0x00, 0x18, 0x01
+            };
+            memcpy(plain, unlocked_awake, sizeof(unlocked_awake));
+            plen = sizeof(unlocked_awake);
+        }
         wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
                                    s_wire_txns[0].routing_addr, s_wire_txns[0].uuid,
                                    plain, plen, &ks->vcsec, req_id_b,
@@ -1497,6 +1428,74 @@ int main(void)
 
         check(got_a && got_b,
               "N15", "consecutive requests with resp_counter==0 both accepted via per-req_id rx_window");
+    }
+
+    /* N16: a VehicleStatus that omits vehicleLockState must not become UNLOCKED. */
+    {
+        uint8_t plain[64], wire[256];
+        uint8_t req_id[17];
+        size_t plen, wlen;
+        VCSEC_FromVCSECMessage vm;
+        pb_ostream_t os;
+        pk_proto_key_slot_t *ks;
+        static const uint8_t omitted_asleep[] = { 0x0A, 0x02, 0x18, 0x02 };
+        static const uint8_t explicit_unlocked[] = { 0x0A, 0x04, 0x10, 0x00, 0x18, 0x01 };
+        bool shown_unlocked;
+
+        setup_connected_slot0(247u, true);
+        ks = port_slot_keys(0);
+        memset(req_id, 0xC3, sizeof(req_id));
+        pk_session_note_req_id(&s_session, 0, s_session.conn_gen,
+                               PK_PROTO_DOMAIN_VEHICLE_SECURITY, req_id);
+        s_wire_txns[0].active = false;
+
+        memset(&vm, 0, sizeof(vm));
+        vm.which_sub_message = VCSEC_FromVCSECMessage_vehicleStatus_tag;
+        vm.sub_message.vehicleStatus.vehicleLockState =
+            VCSEC_VehicleLockState_E_VEHICLELOCKSTATE_LOCKED;
+        vm.sub_message.vehicleStatus.vehicleSleepStatus =
+            VCSEC_VehicleSleepStatus_E_VEHICLE_SLEEP_STATUS_AWAKE;
+        os = pb_ostream_from_buffer(plain, sizeof(plain));
+        pb_encode(&os, VCSEC_FromVCSECMessage_fields, &vm);
+        plen = os.bytes_written;
+        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                   s_wire_txns[0].routing_addr, s_wire_txns[0].uuid,
+                                   plain, plen, &ks->vcsec, req_id,
+                                   true, 0u, false, 0);
+        inject_rx_wire(wire, wlen);
+
+        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                   s_wire_txns[0].routing_addr, s_wire_txns[0].uuid,
+                                   omitted_asleep, sizeof(omitted_asleep), &ks->vcsec, req_id,
+                                   true, 1u, false, 0);
+        inject_rx_wire(wire, wlen);
+        shown_unlocked = g_app.vcsec_status_valid &&
+                         g_app.vcsec_lock_state == PK_LOCK_READ_UNLOCKED;
+        check(g_app.vcsec_status_valid && g_app.vcsec_lock_state == PK_LOCK_READ_LOCKED &&
+              g_app.vcsec_asleep && !shown_unlocked,
+              "N16", "omitted vehicleLockState keeps the confirmed lock");
+
+        g_app.vcsec_status_valid = false;
+        g_app.vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
+        g_app.vcsec_asleep = false;
+        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                   s_wire_txns[0].routing_addr, s_wire_txns[0].uuid,
+                                   omitted_asleep, sizeof(omitted_asleep), &ks->vcsec, req_id,
+                                   true, 2u, false, 0);
+        inject_rx_wire(wire, wlen);
+        shown_unlocked = g_app.vcsec_status_valid &&
+                         g_app.vcsec_lock_state == PK_LOCK_READ_UNLOCKED;
+        check(!g_app.vcsec_status_valid && g_app.vcsec_asleep && !shown_unlocked &&
+              g_app.vcsec_lock_state != PK_LOCK_READ_UNLOCKED,
+              "N16", "omitted vehicleLockState does not become UNLOCKED");
+
+        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                   s_wire_txns[0].routing_addr, s_wire_txns[0].uuid,
+                                   explicit_unlocked, sizeof(explicit_unlocked),
+                                   &ks->vcsec, req_id, true, 3u, false, 0);
+        inject_rx_wire(wire, wlen);
+        check(g_app.vcsec_status_valid && g_app.vcsec_lock_state == PK_LOCK_READ_UNLOCKED,
+              "N16", "explicit vehicleLockState 0 is stored as unlocked");
     }
 
     printf("\nSUMMARY: %d PASS, %d FAIL (total %d)\n", g_pass, g_fail, g_pass + g_fail);

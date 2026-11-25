@@ -283,6 +283,117 @@ static pk_lock_read_t map_vcsec_lock(VCSEC_VehicleLockState_E v)
     }
 }
 
+static bool pb_take_varint(const uint8_t *buf, size_t end, size_t *off, uint64_t *out)
+{
+    uint64_t v = 0;
+    int shift = 0;
+
+    if (!buf || !off || !out) {
+        return false;
+    }
+    while (*off < end && shift <= 63) {
+        uint8_t b = buf[(*off)++];
+        v |= (uint64_t)(b & 0x7fu) << shift;
+        if ((b & 0x80u) == 0) {
+            *out = v;
+            return true;
+        }
+        shift += 7;
+    }
+    return false;
+}
+
+static bool pb_skip_value(const uint8_t *buf, size_t end, size_t *off, unsigned wire)
+{
+    uint64_t n = 0;
+
+    if (!off || *off > end) {
+        return false;
+    }
+    switch (wire) {
+    case 0:
+        return pb_take_varint(buf, end, off, &n);
+    case 1:
+        if (end - *off < 8u) {
+            return false;
+        }
+        *off += 8u;
+        return true;
+    case 2:
+        if (!pb_take_varint(buf, end, off, &n) || n > (uint64_t)(end - *off)) {
+            return false;
+        }
+        *off += (size_t)n;
+        return true;
+    case 5:
+        if (end - *off < 4u) {
+            return false;
+        }
+        *off += 4u;
+        return true;
+    default:
+        return false;
+    }
+}
+
+/* proto3 omits VehicleLockState_E when it is the default UNLOCKED(0), and
+ * nanopb then decodes the missing field as 0. Presence is the tag inside
+ * VehicleStatus, not the decoded value. Field 2 inside closureStatuses is
+ * a door, not the lock. */
+static bool vcsec_lock_field_present(const uint8_t *buf, size_t len)
+{
+    size_t off = 0;
+
+    if (!buf) {
+        return false;
+    }
+    while (off < len) {
+        uint64_t key = 0;
+        unsigned field;
+        unsigned wire;
+
+        if (!pb_take_varint(buf, len, &off, &key)) {
+            return false;
+        }
+        field = (unsigned)(key >> 3);
+        wire = (unsigned)(key & 7u);
+        if (field == VCSEC_FromVCSECMessage_vehicleStatus_tag && wire == 2u) {
+            uint64_t n = 0;
+            size_t sub;
+            size_t sub_end;
+
+            if (!pb_take_varint(buf, len, &off, &n) || n > (uint64_t)(len - off)) {
+                return false;
+            }
+            sub = off;
+            sub_end = off + (size_t)n;
+            off = sub_end;
+            while (sub < sub_end) {
+                uint64_t sk = 0;
+                unsigned sf;
+                unsigned sw;
+
+                if (!pb_take_varint(buf, sub_end, &sub, &sk)) {
+                    return false;
+                }
+                sf = (unsigned)(sk >> 3);
+                sw = (unsigned)(sk & 7u);
+                if (sf == VCSEC_VehicleStatus_vehicleLockState_tag) {
+                    return true;
+                }
+                if (!pb_skip_value(buf, sub_end, &sub, sw)) {
+                    return false;
+                }
+            }
+            continue;
+        }
+        if (!pb_skip_value(buf, len, &off, wire)) {
+            return false;
+        }
+    }
+    return false;
+}
+
 bool pk_proto_parse_vcsec_response(const uint8_t *buf, size_t len, pk_proto_vcsec_resp_t *out)
 {
     VCSEC_FromVCSECMessage fm = VCSEC_FromVCSECMessage_init_zero;
@@ -302,11 +413,16 @@ bool pk_proto_parse_vcsec_response(const uint8_t *buf, size_t len, pk_proto_vcse
     case VCSEC_FromVCSECMessage_vehicleStatus_tag: {
         const VCSEC_VehicleStatus *vs = &fm.sub_message.vehicleStatus;
         out->has_vehicle_status = true;
-        /* proto3 regular enum: vehicleLockState defaults to UNLOCKED(0) on wire when
-         * present inside a populated VehicleStatus submessage. closureStatuses is a
-         * submessage with genuine nanopb has_closureStatuses presence (never fabricated). */
-        out->has_lock_state = true;
-        out->lock_state = map_vcsec_lock(vs->vehicleLockState);
+        /* closureStatuses is a submessage with nanopb has_closureStatuses.
+         * vehicleLockState is a proto3 enum: absent decodes as UNLOCKED(0).
+         * Only a tag on the wire is a lock observation. */
+        if (vcsec_lock_field_present(buf, len)) {
+            out->has_lock_state = true;
+            out->lock_state = map_vcsec_lock(vs->vehicleLockState);
+        } else {
+            out->has_lock_state = false;
+            out->lock_state = PK_LOCK_READ_UNKNOWN;
+        }
         out->sleep_status = (int)vs->vehicleSleepStatus;
         if (vs->has_closureStatuses) {
             const VCSEC_ClosureStatuses *cs = &vs->closureStatuses;

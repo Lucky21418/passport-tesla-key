@@ -84,32 +84,9 @@ void pk_app_open_status(pk_app_t *app, pk_origin_t origin)
     }
     app->page = PK_PAGE_STATUS;
     app->field_count = 0;
-    /* A new status view may wake once when the car is known asleep.
-     * Re-entry and reconnect keep the same owner and do not buy another wake. */
-    if (app->wake_owner != PK_WAKE_OWNER_STATUS) {
-        app->wake_owner = PK_WAKE_OWNER_STATUS;
-        app->wake_spent = false;
-    }
-    if (!app->wake_spent && app->vcsec_status_valid && app->vcsec_asleep &&
-        app->connected && app->paired && app->vehicle != PK_VEHICLE_NONE &&
-        !app->busy && !app->has_pending) {
-        pk_ms_t saved_deadline = app->intent_deadline;
-        app->wake_then_status = true;
-        app->intent_deadline = app->now + pk_plan_deadline(PK_PLAN_WAKE_THEN_READ);
-        if (pk_app_start_wake_then(app)) {
-            strncpy(app->status_phase, "waking", sizeof(app->status_phase) - 1);
-            return;
-        }
-        app->wake_then_status = false;
-        app->intent_deadline = saved_deadline;
-    }
-    if (app->wake_owner == PK_WAKE_OWNER_STATUS &&
-        app->intent_deadline != 0 &&
-        pk_time_due(app->now, app->intent_deadline)) {
-        /* The original status-wake window is over. A later visit may read
-         * without waking, and must not stay pinned to an already-due instant. */
-        app->intent_deadline = 0;
-    }
+    /* Known-asleep is not a reason to send RKE_ACTION_WAKE_VEHICLE.
+     * Reading status is not a wake. A user-initiated wake, and the explicit
+     * wake for a command that needs Infotainment, stay on their own paths. */
     if (app->vehicle == PK_VEHICLE_NONE) {
         strncpy(app->status_phase, "no_target", sizeof(app->status_phase) - 1);
         return;

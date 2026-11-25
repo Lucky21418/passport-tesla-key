@@ -345,6 +345,39 @@ static void test_protocol_crypto_and_wire(void)
                "vcsec VehicleStatus fields decoded accurately");
     }
     {
+        /* Same closures, with vehicleLockState left off the wire.
+         * proto3 would decode the missing enum as UNLOCKED(0). */
+        const uint8_t omitted[] = { 0x0A, 0x04, 0x0A, 0x02, 0x08, 0x01 };
+        /* Field 2 here is frontPassengerDoor, nested inside closureStatuses. */
+        const uint8_t nested_door[] = { 0x0A, 0x04, 0x0A, 0x02, 0x10, 0x01 };
+        /* Explicit UNLOCKED(0) plus the same open door. */
+        const uint8_t explicit_zero[] = { 0x0A, 0x06, 0x0A, 0x02, 0x08, 0x01, 0x10, 0x00 };
+        const uint8_t asleep_only[] = { 0x0A, 0x02, 0x18, 0x02 };
+        pk_proto_vcsec_resp_t omitted_resp;
+
+        expect(pk_proto_parse_vcsec_response(omitted, sizeof(omitted), &omitted_resp) &&
+               omitted_resp.has_vehicle_status && !omitted_resp.has_lock_state &&
+               omitted_resp.lock_state == PK_LOCK_READ_UNKNOWN &&
+               omitted_resp.has_closure_statuses &&
+               omitted_resp.closures[PK_CLOSURE_FRONT_LEFT] == PK_CLOSURE_OPEN,
+               "omitted vehicleLockState is not decoded as UNLOCKED");
+        expect(pk_proto_parse_vcsec_response(nested_door, sizeof(nested_door), &omitted_resp) &&
+               omitted_resp.has_vehicle_status && !omitted_resp.has_lock_state &&
+               omitted_resp.lock_state != PK_LOCK_READ_UNLOCKED &&
+               omitted_resp.closures[PK_CLOSURE_FRONT_RIGHT] == PK_CLOSURE_OPEN,
+               "closure field 2 is not vehicleLockState");
+        expect(pk_proto_parse_vcsec_response(explicit_zero, sizeof(explicit_zero), &omitted_resp) &&
+               omitted_resp.has_lock_state &&
+               omitted_resp.lock_state == PK_LOCK_READ_UNLOCKED &&
+               omitted_resp.closures[PK_CLOSURE_FRONT_LEFT] == PK_CLOSURE_OPEN,
+               "explicit vehicleLockState 0 is UNLOCKED");
+        expect(pk_proto_parse_vcsec_response(asleep_only, sizeof(asleep_only), &omitted_resp) &&
+               omitted_resp.has_vehicle_status && !omitted_resp.has_lock_state &&
+               omitted_resp.lock_state == PK_LOCK_READ_UNKNOWN &&
+               omitted_resp.sleep_status == 2,
+               "asleep status without vehicleLockState is not unlocked");
+    }
+    {
         /* CarServer.Response { actionStatus(1) { result(1)=OK(0) },
          *   vehicleData(2) { drive_state(5) { shift_state(1) { P(2)={} }, speed(102)=0 } } }
          * Tag for field 102 varint: (102 << 3) | 0 = 816 = 0xB0 0x06
@@ -1627,6 +1660,7 @@ static void test_direct_toggle_inline_feedback(void)
 
 static pk_ble_frame_t g_cap_frame;
 static int g_cap_writes;
+static pk_err_t g_cap_write_rc = PK_OK;
 
 static bool fake_has_session(void *ctx, int slot, pk_domain_t domain)
 {
@@ -1653,7 +1687,7 @@ static pk_err_t capture_write(void *ctx, const pk_ble_frame_t *frame)
     (void)ctx;
     g_cap_frame = *frame;
     g_cap_writes++;
-    return PK_OK;
+    return g_cap_write_rc;
 }
 
 static void test_check_before_act_and_lease_origin(void)
@@ -2985,6 +3019,7 @@ static void setup_connected_main_for_keys(pk_app_t *app, pk_ble_adapter_t *ad,
                                           pk_btn_adapter_t *btn)
 {
     g_cap_writes = 0;
+    g_cap_write_rc = PK_OK;
     pk_app_init(app, PK_VEHICLE_NONE, true);
     pk_ble_adapter_init(ad);
     ad->radio.write_once = capture_write;
@@ -3305,9 +3340,8 @@ static void test_command_observation_decoupling(void)
            pk_app_primary(&app) == PK_ACTION_VCSEC_GET_STATUS_ONCE,
            "decouple: INVALID_COUNTER invalidates lock state and primary is read-only query, not LOCK");
 
-    /* 2. Symmetric UNLOCK timeout: starts PK_PENDING_UNLOCK_VERIFY (read-only
-     * VCSEC_GET_STATUS_ONCE) while connected; if verify also times out, clears
-     * stale LOCKED snapshot and reports PK_MSG_CMD_UNCONFIRMED. */
+    /* 2. UNLOCK timeout starts a read-only verify. A missing reply keeps the
+     * last confirmed lock and stays unconfirmed; it does not become 查锁态. */
     setup_connected_main_for_keys(&app, &ad, &btn);
     pk_app_vcsec_status(&app, false, PK_LOCK_READ_LOCKED);
     intent = pk_app_make_intent(&app, PK_ACTION_UNLOCK);
@@ -3317,11 +3351,11 @@ static void test_command_observation_decoupling(void)
            app.pending.action == PK_ACTION_VCSEC_GET_STATUS_ONCE,
            "decouple: UNLOCK timeout symmetrically starts read-only unlock verify");
     pk_app_tick(&app, 1100u + PK_COMMAND_WAIT_MS + 10u + PK_LOCK_VERIFY_MS + 10u);
-    expect(!app.has_pending && !app.vcsec_status_valid &&
-           app.vcsec_lock_state == PK_LOCK_READ_UNKNOWN &&
+    expect(!app.has_pending && app.vcsec_status_valid &&
+           app.vcsec_lock_state == PK_LOCK_READ_LOCKED &&
            app.message == PK_MSG_CMD_UNCONFIRMED &&
-           pk_app_primary(&app) == PK_ACTION_VCSEC_GET_STATUS_ONCE,
-           "decouple: UNLOCK verify timeout clears stale LOCKED and primary is not LOCK");
+           pk_app_primary(&app) == PK_ACTION_UNLOCK,
+           "decouple: UNLOCK verify timeout keeps confirmed LOCKED and primary is not 查锁态");
 
     /* 3. Comfort toggles: refuse UNKNOWN, and ACCEPTED never optimistically
      * flips caps without a vehicle observation. */
@@ -3426,6 +3460,96 @@ static void test_command_observation_decoupling(void)
         expect(app.vcsec_status_valid && app.vcsec_lock_state == PK_LOCK_READ_LOCKED &&
                app.vcsec_asleep,
                "decouple: missing-field VehicleStatus preserves known lock state");
+    }
+
+    /* 8. Local verify timeout, a failed follow-up GET_STATUS, and an omitted
+     * vehicleLockState keep a confirmed lock. Explicit zero still means unlocked. */
+    {
+        const uint8_t omitted[] = { 0x0A, 0x02, 0x18, 0x02 };
+        const uint8_t explicit_zero[] = { 0x0A, 0x02, 0x10, 0x00 };
+        pk_proto_vcsec_resp_t parsed;
+        bool shown_unlocked;
+
+        setup_connected_main_for_keys(&app, &ad, &btn);
+        pk_app_vcsec_status(&app, false, PK_LOCK_READ_UNLOCKED);
+        intent = pk_app_make_intent(&app, PK_ACTION_LOCK);
+        expect(pk_app_commit(&app, &intent, 1100u), "decouple: LOCK commits for verify timeout");
+        expect(pk_app_command_result(&app, app.pending.id, PK_CMD_RESULT_ACCEPTED, true),
+               "decouple: LOCK accept starts verify");
+        pk_app_tick(&app, app.pending.deadline + 1u);
+        shown_unlocked = app.vcsec_status_valid &&
+                         app.vcsec_lock_state == PK_LOCK_READ_UNLOCKED;
+        expect(!app.has_pending && app.message == PK_MSG_LOCK_UNCONFIRMED &&
+               shown_unlocked && pk_app_primary(&app) == PK_ACTION_LOCK,
+               "decouple: LOCK verify timeout keeps confirmed UNLOCKED");
+
+        setup_connected_main_for_keys(&app, &ad, &btn);
+        pk_app_vcsec_status(&app, false, PK_LOCK_READ_LOCKED);
+        intent = pk_app_make_intent(&app, PK_ACTION_UNLOCK);
+        expect(pk_app_commit(&app, &intent, 1100u), "decouple: UNLOCK commits before GET_STATUS failure");
+        g_cap_write_rc = PK_ERR_UNKNOWN;
+        pk_app_tick(&app, 1100u + PK_COMMAND_WAIT_MS + 10u);
+        g_cap_write_rc = PK_OK;
+        expect(!app.has_pending && app.vcsec_status_valid &&
+               app.vcsec_lock_state == PK_LOCK_READ_LOCKED &&
+               app.message == PK_MSG_CMD_UNCONFIRMED &&
+               pk_app_primary(&app) == PK_ACTION_UNLOCK,
+               "decouple: GET_STATUS send failure keeps confirmed LOCKED");
+
+        setup_connected_main_for_keys(&app, &ad, &btn);
+        pk_app_vcsec_status(&app, false, PK_LOCK_READ_LOCKED);
+        intent = pk_app_make_intent(&app, PK_ACTION_LOCK);
+        expect(pk_app_commit(&app, &intent, 1100u), "decouple: LOCK commits for unknown packet");
+        expect(pk_app_command_result(&app, app.pending.id, PK_CMD_RESULT_ACCEPTED, true),
+               "decouple: verify pending for unknown packet");
+        {
+            pk_lock_packet_t pkt;
+            memset(&pkt, 0, sizeof(pkt));
+            pkt.request_id = app.pending.id;
+            pkt.authenticated = true;
+            pkt.correlated = true;
+            pkt.adapter_verified = true;
+            pkt.lock = PK_LOCK_READ_UNKNOWN;
+            pkt.complete = true;
+            expect(pk_app_lock_packet(&app, &pkt), "decouple: unknown lock packet is handled");
+        }
+        expect(app.message == PK_MSG_LOCK_UNCONFIRMED && app.vcsec_status_valid &&
+               app.vcsec_lock_state == PK_LOCK_READ_LOCKED &&
+               pk_app_primary(&app) == PK_ACTION_UNLOCK,
+               "decouple: unknown lock packet does not clear confirmed LOCKED");
+
+        setup_connected_main_for_keys(&app, &ad, &btn);
+        pk_app_vcsec_status(&app, false, PK_LOCK_READ_LOCKED);
+        expect(pk_proto_parse_vcsec_response(omitted, sizeof(omitted), &parsed) &&
+               !parsed.has_lock_state && parsed.lock_state == PK_LOCK_READ_UNKNOWN,
+               "decouple: omitted enum parses as no lock field");
+        pk_app_vcsec_status(&app, parsed.sleep_status == 2, parsed.lock_state);
+        shown_unlocked = app.vcsec_status_valid &&
+                         app.vcsec_lock_state == PK_LOCK_READ_UNLOCKED;
+        expect(app.vcsec_status_valid && app.vcsec_lock_state == PK_LOCK_READ_LOCKED &&
+               app.vcsec_asleep && !shown_unlocked &&
+               pk_app_primary(&app) == PK_ACTION_UNLOCK,
+               "decouple: omitted vehicleLockState does not display unlocked");
+
+        pk_app_vcsec_status(&app, false, PK_LOCK_READ_UNKNOWN);
+        app.vcsec_status_valid = false;
+        app.vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
+        pk_app_vcsec_status(&app, parsed.sleep_status == 2, parsed.lock_state);
+        shown_unlocked = app.vcsec_status_valid &&
+                         app.vcsec_lock_state == PK_LOCK_READ_UNLOCKED;
+        expect(!app.vcsec_status_valid && app.vcsec_asleep && !shown_unlocked &&
+               app.vcsec_lock_state == PK_LOCK_READ_UNKNOWN &&
+               pk_app_primary(&app) == PK_ACTION_VCSEC_GET_STATUS_ONCE,
+               "decouple: omitted vehicleLockState does not create an unlocked state");
+
+        expect(pk_proto_parse_vcsec_response(explicit_zero, sizeof(explicit_zero), &parsed) &&
+               parsed.has_lock_state && parsed.lock_state == PK_LOCK_READ_UNLOCKED,
+               "decouple: explicit zero parses as UNLOCKED");
+        pk_app_vcsec_status(&app, false, parsed.lock_state);
+        shown_unlocked = app.vcsec_status_valid &&
+                         app.vcsec_lock_state == PK_LOCK_READ_UNLOCKED;
+        expect(shown_unlocked && pk_app_primary(&app) == PK_ACTION_LOCK,
+               "decouple: explicit vehicleLockState 0 is a real unlocked observation");
     }
 }
 
