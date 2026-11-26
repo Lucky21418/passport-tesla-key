@@ -600,7 +600,8 @@ static void setup_connected_slot0(uint16_t mtu, bool establish_sessions)
             s_session.handshake[0].routing_addr, s_session.handshake[0].uuid,
             ks->pubkey, ep_v, 10, 500, false, 0, NULL);
         inject_rx_wire(si_wire, slen);
-        /* Establish Infotainment session (triggered automatically by VCSEC ok) */
+        /* Establish Infotainment session on demand for tests that require both domains */
+        request_session_if_idle(0, PK_PROTO_DOMAIN_INFOTAINMENT);
         slen = build_session_info_frame(
             si_wire, sizeof(si_wire), PK_PROTO_DOMAIN_INFOTAINMENT,
             s_session.handshake[1].routing_addr, s_session.handshake[1].uuid,
@@ -1734,6 +1735,58 @@ int main(void)
         check(after_bare_err, "N19", "VCSEC frame 2 bare OPERATIONSTATUS_ERROR is dropped while waiting for nominalError");
         check(after_nominal_err, "N19", "VCSEC frame 3 nominalError terminates pending command as rejected");
         check(empty_starts_verify, "N19", "Authenticated empty FromVCSECMessage on LOCK enters read-only verify");
+    }
+
+    /* N20: Official item 5 (A1) — two separate domain sessions; connect + VCSEC
+     * handshake + pure VCSEC actions (lock, unlock, trunk, status) MUST NOT
+     * trigger an Infotainment handshake; Infotainment handshakes only on demand. */
+    {
+        uint8_t si_wire[256];
+        uint8_t ep_v[16] = { 9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9 };
+        pk_proto_key_slot_t *ks;
+        size_t slen;
+        bool vcsec_only_after_connect;
+        bool pure_vcsec_no_info_hs;
+        bool info_on_demand;
+
+        setup_connected_slot0(247u, false);
+        ks = port_slot_keys(0);
+        slen = build_session_info_frame(
+            si_wire, sizeof(si_wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+            s_session.handshake[0].routing_addr, s_session.handshake[0].uuid,
+            ks->pubkey, ep_v, 10, 500, false, 0, NULL);
+        inject_rx_wire(si_wire, slen);
+        vcsec_only_after_connect = (ks->vcsec.valid && !ks->infotainment.valid &&
+                                    !s_session.handshake[1].valid);
+
+        /* Pure VCSEC actions (LOCK, UNLOCK, TRUNK, FRUNK, GET_STATUS) stay on VCSEC */
+        memset(s_wire_txns, 0, sizeof(s_wire_txns));
+        g_ble.in_flight = false;
+        (void)pk_ble_send_once(&g_app, PK_DOMAIN_VCSEC, PK_ACTION_LOCK, g_now_ms + 3000u);
+        memset(s_wire_txns, 0, sizeof(s_wire_txns));
+        g_ble.in_flight = false;
+        (void)pk_ble_send_once(&g_app, PK_DOMAIN_VCSEC, PK_ACTION_UNLOCK, g_now_ms + 3000u);
+        memset(s_wire_txns, 0, sizeof(s_wire_txns));
+        g_ble.in_flight = false;
+        (void)pk_ble_send_once(&g_app, PK_DOMAIN_VCSEC, PK_ACTION_TRUNK_MOVE, g_now_ms + 3000u);
+        memset(s_wire_txns, 0, sizeof(s_wire_txns));
+        g_ble.in_flight = false;
+        (void)pk_ble_send_once(&g_app, PK_DOMAIN_VCSEC, PK_ACTION_FRUNK_OPEN, g_now_ms + 3000u);
+        memset(s_wire_txns, 0, sizeof(s_wire_txns));
+        g_ble.in_flight = false;
+        (void)pk_ble_send_once(&g_app, PK_DOMAIN_VCSEC, PK_ACTION_VCSEC_GET_STATUS_ONCE, g_now_ms + 3000u);
+        pure_vcsec_no_info_hs = (ks->vcsec.valid && !ks->infotainment.valid &&
+                                 !s_session.handshake[1].valid);
+
+        /* Infotainment action triggers Infotainment handshake on demand */
+        memset(s_wire_txns, 0, sizeof(s_wire_txns));
+        g_ble.in_flight = false;
+        (void)pk_ble_send_once(&g_app, PK_DOMAIN_INFOTAINMENT, PK_ACTION_CLIMATE_ON, g_now_ms + 3000u);
+        info_on_demand = (s_session.handshake[1].valid && ks->vcsec.valid &&
+                          !ks->infotainment.valid);
+
+        check(vcsec_only_after_connect && pure_vcsec_no_info_hs && info_on_demand,
+              "N20", "pure VCSEC connect/lock/unlock/trunk/frunk/status never handshake Infotainment; Infotainment handshakes on demand");
     }
 
     printf("\nSUMMARY: %d PASS, %d FAIL (total %d)\n", g_pass, g_fail, g_pass + g_fail);

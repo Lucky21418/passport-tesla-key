@@ -1780,10 +1780,7 @@ static bool apply_rx_session_info(pk_app_t *app, int slot, uint32_t conn_gen,
         return true;
     }
     flush_waiting_session_txn(app, ks, vin, sess, rmsg->from_domain, conn_gen);
-    if (rmsg->from_domain == PK_PROTO_DOMAIN_VEHICLE_SECURITY &&
-        slot == app->vehicle && !ks->infotainment.valid) {
-        request_session_if_idle(slot, PK_PROTO_DOMAIN_INFOTAINMENT);
-    } else {
+    if (rmsg->from_domain == PK_PROTO_DOMAIN_VEHICLE_SECURITY && slot == app->vehicle) {
         start_background_status_probe(app, slot, conn_gen, ks, vin);
     }
     return true;
@@ -2159,16 +2156,11 @@ static void handle_ble_connected_event(pk_app_t *app, int slot, uint32_t conn_ge
     if (!sent_req && slot != PK_VEHICLE_PAIR_CANDIDATE) {
         pk_proto_key_slot_t *ks = port_slot_keys(slot);
         if (ks && ks->vcsec.valid) {
-            /* Reuse the surviving VCSEC session: no SessionInfo handshake on
-             * reconnect. Continue the same post-connect work a fresh handshake
-             * response would (Infotainment handshake, then status refresh). */
-            if (!ks->infotainment.valid) {
-                request_session_if_idle(slot, PK_PROTO_DOMAIN_INFOTAINMENT);
-            } else {
-                start_background_status_probe(app, slot, conn_gen, ks, port_slot_vin(slot));
-            }
+            /* Reuse the surviving VCSEC session without eagerly handshaking
+             * Infotainment (Official A1: pure VCSEC ops stay on VCSEC). */
+            start_background_status_probe(app, slot, conn_gen, ks, port_slot_vin(slot));
         } else {
-            /* Serialize handshakes: VCSEC SessionInfo first; Infotainment follows in apply_rx_session_info. */
+            /* Handshake VCSEC only; Infotainment handshakes on demand. */
             request_session_if_idle(slot, PK_PROTO_DOMAIN_VEHICLE_SECURITY);
         }
     }
