@@ -72,13 +72,22 @@ typedef enum {
     PK_PROTO_KEY_FORM_CLOUD_KEY      = 9
 } pk_proto_key_form_t;
 
-/* Keys.Role */
+/* Keys.Role. Values match keys.proto Role
+ * (teslamotors/vehicle-command @ 0a582da). Pairing uses
+ * pk_proto_pair_key_role(), which is Driver. */
 typedef enum {
     PK_PROTO_ROLE_NONE               = 0,
     PK_PROTO_ROLE_SERVICE            = 1,
     PK_PROTO_ROLE_OWNER              = 2,
-    PK_PROTO_ROLE_DRIVER             = 3
+    PK_PROTO_ROLE_DRIVER             = 3,
+    PK_PROTO_ROLE_FM                 = 4,
+    PK_PROTO_ROLE_VEHICLE_MONITOR    = 5,
+    PK_PROTO_ROLE_CHARGING_MANAGER   = 6,
+    PK_PROTO_ROLE_GUEST              = 8
 } pk_proto_role_t;
+
+/* Least official role that can lock, unlock, and move both trunks. */
+pk_proto_role_t pk_proto_pair_key_role(void);
 
 /* VCSEC.RKEAction_E */
 typedef enum {

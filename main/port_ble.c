@@ -813,7 +813,7 @@ static pk_err_t start_addkey_txn(active_wire_txn_t *txn, const pk_proto_key_slot
         return PK_ERR_INVALID;
     }
     inner_len = pk_proto_encode_vcsec_add_key(
-        ks->pubkey, PK_PROTO_ROLE_DRIVER, PK_PROTO_KEY_FORM_CLOUD_KEY,
+        ks->pubkey, pk_proto_pair_key_role(), PK_PROTO_KEY_FORM_CLOUD_KEY,
         inner, sizeof(inner));
     if (inner_len == 0) {
         txn->active = false;

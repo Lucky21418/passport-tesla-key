@@ -191,6 +191,18 @@ size_t pk_proto_encode_vcsec_info_req(pk_proto_info_req_t req_type, uint8_t *out
     return encode_msg(VCSEC_UnsignedMessage_fields, &umsg, out, cap);
 }
 
+pk_proto_role_t pk_proto_pair_key_role(void)
+{
+    /* protocol.md Roles @ 0a582da. Driver authorizes most commands except
+     * other users' keys and access-control PINs. That covers lock, unlock,
+     * front trunk, and rear trunk without Owner's key management. Charging
+     * Manager only reads data and authorizes charging. Fleet Manager on
+     * 2023.38+ cannot send BLE commands. Vehicle Monitor cannot change
+     * state. Guest is a temporary Driver for rentals. Service is for
+     * pairing bootstrap and roadside lock/unlock, not this enrolled key. */
+    return PK_PROTO_ROLE_DRIVER;
+}
+
 size_t pk_proto_encode_vcsec_add_key(const uint8_t pubkey[65],
                                      pk_proto_role_t role,
                                      pk_proto_key_form_t form_factor,
@@ -340,7 +352,7 @@ size_t pk_proto_encode_action_payload(pk_action_t action,
     case PK_ACTION_TRUNK_MOVE:
         return pk_proto_encode_vcsec_closure(PK_CLOSURE_REAR, PK_PROTO_CLOSURE_MOVE_MOVE, out, cap);
     case PK_ACTION_ADDKEY:
-        return pk_proto_encode_vcsec_add_key(client_pubkey65, PK_PROTO_ROLE_DRIVER,
+        return pk_proto_encode_vcsec_add_key(client_pubkey65, pk_proto_pair_key_role(),
                                              PK_PROTO_KEY_FORM_CLOUD_KEY, out, cap);
     case PK_ACTION_GET_QUALIFICATION:
     case PK_ACTION_PAIR_VERIFY_INFOTAINMENT:

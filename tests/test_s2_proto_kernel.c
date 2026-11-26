@@ -1362,6 +1362,81 @@ static void test_passive_auth_unmatched_not_in_window(void)
           "P05.8", "exact 41-byte foreign frame does not move the window");
 }
 
+static bool decode_addkey_role(const uint8_t *wire, size_t n, Keys_Role *role_out)
+{
+    pb_istream_t is;
+    VCSEC_ToVCSECMessage to = VCSEC_ToVCSECMessage_init_zero;
+    VCSEC_UnsignedMessage um = VCSEC_UnsignedMessage_init_zero;
+    const VCSEC_PermissionChange *perm;
+
+    if (!wire || n == 0u || !role_out) {
+        return false;
+    }
+    is = pb_istream_from_buffer(wire, n);
+    if (!pb_decode(&is, VCSEC_ToVCSECMessage_fields, &to) || !to.has_signedMessage ||
+        to.signedMessage.protobufMessageAsBytes.size == 0u) {
+        return false;
+    }
+    is = pb_istream_from_buffer(to.signedMessage.protobufMessageAsBytes.bytes,
+                                to.signedMessage.protobufMessageAsBytes.size);
+    if (!pb_decode(&is, VCSEC_UnsignedMessage_fields, &um) ||
+        um.which_sub_message != VCSEC_UnsignedMessage_WhitelistOperation_tag ||
+        um.sub_message.WhitelistOperation.which_sub_message !=
+            VCSEC_WhitelistOperation_addKeyToWhitelistAndAddPermissions_tag) {
+        return false;
+    }
+    perm = &um.sub_message.WhitelistOperation.sub_message.addKeyToWhitelistAndAddPermissions;
+    *role_out = perm->keyRole;
+    return true;
+}
+
+static void test_pair_role_minimum_for_locks_and_trunks(void)
+{
+    uint8_t pub[65];
+    uint8_t wire[256];
+    size_t n;
+    Keys_Role paired = Keys_Role_ROLE_NONE;
+    Keys_Role charging = Keys_Role_ROLE_NONE;
+
+    memset(pub, 0x5a, sizeof(pub));
+    pub[0] = 0x04u;
+
+    check(pk_proto_pair_key_role() == PK_PROTO_ROLE_DRIVER &&
+          (unsigned)PK_PROTO_ROLE_DRIVER == (unsigned)Keys_Role_ROLE_DRIVER &&
+          (unsigned)Keys_Role_ROLE_DRIVER == 3u,
+          "A30.0", "enrollment role is official Driver (3)");
+    check((unsigned)PK_PROTO_ROLE_CHARGING_MANAGER ==
+              (unsigned)Keys_Role_ROLE_CHARGING_MANAGER &&
+          (unsigned)Keys_Role_ROLE_CHARGING_MANAGER == 6u &&
+          (unsigned)PK_PROTO_ROLE_OWNER == (unsigned)Keys_Role_ROLE_OWNER &&
+          (unsigned)PK_PROTO_ROLE_FM == (unsigned)Keys_Role_ROLE_FM &&
+          (unsigned)PK_PROTO_ROLE_VEHICLE_MONITOR ==
+              (unsigned)Keys_Role_ROLE_VEHICLE_MONITOR &&
+          (unsigned)PK_PROTO_ROLE_GUEST == (unsigned)Keys_Role_ROLE_GUEST &&
+          (unsigned)PK_PROTO_ROLE_SERVICE == (unsigned)Keys_Role_ROLE_SERVICE,
+          "A30.1", "product role numbers match keys.proto");
+
+    n = pk_proto_encode_action_payload(PK_ACTION_ADDKEY, NULL, pub, wire, sizeof(wire));
+    check(n > 0u && decode_addkey_role(wire, n, &paired) &&
+          paired == Keys_Role_ROLE_DRIVER,
+          "A30.2", "AddKey wire role is Driver");
+    check(paired != Keys_Role_ROLE_CHARGING_MANAGER &&
+          paired != Keys_Role_ROLE_OWNER &&
+          paired != Keys_Role_ROLE_FM &&
+          paired != Keys_Role_ROLE_VEHICLE_MONITOR &&
+          paired != Keys_Role_ROLE_GUEST &&
+          paired != Keys_Role_ROLE_SERVICE &&
+          paired != Keys_Role_ROLE_NONE,
+          "A30.3", "AddKey is not Charging Manager, Owner, Fleet Manager, monitor, Guest, or Service");
+
+    n = pk_proto_encode_vcsec_add_key(pub, PK_PROTO_ROLE_CHARGING_MANAGER,
+                                      PK_PROTO_KEY_FORM_CLOUD_KEY, wire, sizeof(wire));
+    check(n > 0u && decode_addkey_role(wire, n, &charging) &&
+          charging == Keys_Role_ROLE_CHARGING_MANAGER &&
+          charging != paired,
+          "A30.4", "encoder can write Charging Manager, and pairing does not select it");
+}
+
 int main(void)
 {
     printf("=== S2 Security Pre-Gate & N01-N08 Kernel Suite ===\n");
@@ -1373,6 +1448,7 @@ int main(void)
     test_req_id_required_no_domain_fallback();
     test_response_aad_counter_before_window();
     test_passive_auth_unmatched_not_in_window();
+    test_pair_role_minimum_for_locks_and_trunks();
 
     printf("\nSUMMARY: %d PASS, %d FAIL (total %d)\n", g_pass, g_fail, g_pass + g_fail);
     return (g_fail == 0) ? 0 : 1;
