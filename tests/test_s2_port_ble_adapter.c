@@ -238,7 +238,19 @@ int ble_gap_connect(uint8_t o, const ble_addr_t *pa, int32_t d, const void *cp, 
 int ble_gap_terminate(uint16_t ch, uint8_t r) { (void)ch; (void)r; return 0; }
 int ble_gap_update_params(uint16_t ch, const struct ble_gap_upd_params *p) { (void)ch; (void)p; return 0; }
 int ble_gap_conn_rssi(uint16_t ch, int8_t *out) { (void)ch; if (out) *out = -55; return 0; }
-int ble_gattc_exchange_mtu(uint16_t ch, ble_gatt_mtu_fn *cb, void *a) { (void)ch; (void)cb; (void)a; return 0; }
+static int g_mtu_exchange_calls;
+static int g_mtu_exchange_rc;
+static uint16_t g_mtu_exchange_conn;
+static ble_gatt_mtu_fn *g_mtu_exchange_cb;
+static void *g_mtu_exchange_arg;
+int ble_gattc_exchange_mtu(uint16_t ch, ble_gatt_mtu_fn *cb, void *a)
+{
+    g_mtu_exchange_calls++;
+    g_mtu_exchange_conn = ch;
+    g_mtu_exchange_cb = cb;
+    g_mtu_exchange_arg = a;
+    return g_mtu_exchange_rc;
+}
 int ble_gattc_disc_svc_by_uuid(uint16_t ch, const ble_uuid_t *u, ble_gatt_disc_svc_fn *cb, void *a)
 { (void)ch; (void)u; (void)cb; (void)a; return 0; }
 int ble_gattc_disc_all_chrs(uint16_t ch, uint16_t s, uint16_t e, ble_gatt_chr_fn *cb, void *a)
@@ -1573,6 +1585,65 @@ int main(void)
 
         check(direct_noted && flush_noted && probe_noted,
               "N17", "signed lock, session flush, and status probe note req_id and skip the domain window");
+    }
+
+    /* N18: Official item 10 — ExchangeMTU after CCCD subscribe, fallback to
+     * DefaultMTU-3 (20B) on ExchangeMTU failure, stale conn_handle ignored. */
+    {
+        struct ble_gatt_error err;
+        bool fail_cccd_no_mtu;
+        bool sub_then_mtu_ok;
+        bool cb_fail_fallback;
+        bool imm_fail_fallback;
+        bool stale_conn_ignored;
+
+        /* 1. Failed CCCD subscribe must NOT trigger ExchangeMTU */
+        setup_connected_slot0(23u, false);
+        g_mtu_exchange_calls = 0;
+        g_mtu_exchange_rc = 0;
+        g_mtu_exchange_cb = NULL;
+        memset(&err, 0, sizeof(err));
+        err.status = 5;
+        on_cccd_written(s_conn_handle, &err, NULL, NULL);
+        fail_cccd_no_mtu = (g_mtu_exchange_calls == 0);
+
+        /* 2. Successful CCCD subscribe triggers ExchangeMTU; success sets MTU=247 (244B chunk) */
+        err.status = 0;
+        on_cccd_written(s_conn_handle, &err, NULL, NULL);
+        sub_then_mtu_ok = (g_mtu_exchange_calls == 1 && g_mtu_exchange_cb != NULL &&
+                           g_mtu_exchange_conn == s_conn_handle);
+        if (g_mtu_exchange_cb) {
+            err.status = 0;
+            g_mtu_exchange_cb(s_conn_handle, &err, 247u, g_mtu_exchange_arg);
+        }
+        sub_then_mtu_ok = sub_then_mtu_ok &&
+                          (s_peer_mtu == 247u) &&
+                          (pk_gatt_tx_chunk_size(&s_gatt_tx) == 244u);
+
+        /* 3. Stale conn_handle in on_mtu_exchanged must not clobber active MTU */
+        err.status = 14;
+        on_mtu_exchanged((uint16_t)(s_conn_handle + 1u), &err, 23u, NULL);
+        stale_conn_ignored = (s_peer_mtu == 247u && pk_gatt_tx_chunk_size(&s_gatt_tx) == 244u);
+
+        /* 4. ExchangeMTU callback failure falls back to DefaultMTU-3 (MTU=23, 20B chunk) */
+        err.status = 14;
+        on_mtu_exchanged(s_conn_handle, &err, 0u, NULL);
+        cb_fail_fallback = (s_peer_mtu == 23u && pk_gatt_tx_chunk_size(&s_gatt_tx) == 20u);
+
+        /* 5. Immediate ble_gattc_exchange_mtu failure falls back to DefaultMTU-3 (20B chunk) */
+        setup_connected_slot0(247u, false);
+        g_mtu_exchange_calls = 0;
+        g_mtu_exchange_rc = -1;
+        err.status = 0;
+        on_cccd_written(s_conn_handle, &err, NULL, NULL);
+        imm_fail_fallback = (g_mtu_exchange_calls == 1 &&
+                             s_peer_mtu == 23u &&
+                             pk_gatt_tx_chunk_size(&s_gatt_tx) == 20u);
+        g_mtu_exchange_rc = 0;
+
+        check(fail_cccd_no_mtu && sub_then_mtu_ok && stale_conn_ignored &&
+              cb_fail_fallback && imm_fail_fallback,
+              "N18", "ExchangeMTU runs after CCCD subscribe and falls back to DefaultMTU-3 (20B) on failure");
     }
 
     printf("\nSUMMARY: %d PASS, %d FAIL (total %d)\n", g_pass, g_fail, g_pass + g_fail);

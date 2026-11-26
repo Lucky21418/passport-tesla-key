@@ -448,18 +448,35 @@ static void post_ble_connected(int slot, uint32_t conn_gen)
 static int on_mtu_exchanged(uint16_t conn_handle, const struct ble_gatt_error *error,
                             uint16_t mtu, void *arg)
 {
-    int slot;
-    uint32_t conn_gen;
-    (void)conn_handle;
+    int slot = PK_VEHICLE_NONE;
+    uint32_t conn_gen = 0;
+    bool current_conn;
     (void)arg;
-    if (error && error->status == 0 && mtu > 23) {
-        diag_event(DIAG_MTU, 0, 0, (int)mtu, 0);
-        portENTER_CRITICAL(&s_radio_mux);
-        s_peer_mtu = mtu;
-        pk_gatt_tx_set_mtu(&s_gatt_tx, mtu);
-        portEXIT_CRITICAL(&s_radio_mux);
+
+    portENTER_CRITICAL(&s_radio_mux);
+    current_conn = (s_conn_handle == conn_handle && conn_handle != BLE_HS_CONN_HANDLE_NONE);
+    if (current_conn) {
+        if (error && error->status == 0 && mtu > 23u) {
+            s_peer_mtu = mtu;
+            pk_gatt_tx_set_mtu(&s_gatt_tx, mtu);
+        } else {
+            s_peer_mtu = 23u;
+            pk_gatt_tx_set_mtu(&s_gatt_tx, 23u);
+        }
+        slot = s_active_conn_slot;
+        conn_gen = s_conn_gen;
     }
-    radio_snapshot_ex(NULL, NULL, NULL, &slot, &conn_gen);
+    portEXIT_CRITICAL(&s_radio_mux);
+
+    if (!current_conn) {
+        return 0;
+    }
+    if (error && error->status == 0 && mtu > 23u) {
+        diag_event(DIAG_MTU, 0, 0, (int)mtu, 0);
+    } else {
+        ESP_LOGW(TAG, "MTU exchange failed (status=%d, mtu=%u); fallback to DefaultMTU-3 (20B)",
+                 error ? error->status : -1, (unsigned)mtu);
+    }
     post_ble_connected(slot, conn_gen);
     return 0;
 }
@@ -474,7 +491,16 @@ static int on_cccd_written(uint16_t conn_handle, const struct ble_gatt_error *er
 
     radio_snapshot_ex(NULL, NULL, NULL, &slot, &conn_gen);
     if (error && error->status == 0 && slot != PK_VEHICLE_NONE) {
-        if (ble_gattc_exchange_mtu(conn_handle, on_mtu_exchanged, NULL) != 0) {
+        int rc = ble_gattc_exchange_mtu(conn_handle, on_mtu_exchanged, NULL);
+        if (rc != 0) {
+            ESP_LOGW(TAG, "ble_gattc_exchange_mtu failed (rc=%d); fallback to DefaultMTU-3 (20B)",
+                     rc);
+            portENTER_CRITICAL(&s_radio_mux);
+            if (s_conn_handle == conn_handle) {
+                s_peer_mtu = 23u;
+                pk_gatt_tx_set_mtu(&s_gatt_tx, 23u);
+            }
+            portEXIT_CRITICAL(&s_radio_mux);
             post_ble_connected(slot, conn_gen);
         }
     }
