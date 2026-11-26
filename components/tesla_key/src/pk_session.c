@@ -338,17 +338,20 @@ pk_proto_rx_window_t *pk_session_rx_window_for_req(pk_session_ctx_t *ctx,
     if (!ctx || (idx = session_index(domain)) < 0) {
         return NULL;
     }
-    if (req_id) {
-        for (step = 0u; step < PK_SESSION_REQ_ID_CAP; ++step) {
-            uint8_t pos = (uint8_t)((ctx->req_id_next[idx] + PK_SESSION_REQ_ID_CAP - 1u - step) %
-                                    PK_SESSION_REQ_ID_CAP);
-            pk_session_req_id_t *rid = &ctx->req_ids[idx][pos];
-            if (rid->valid && memcmp(rid->req_id, req_id, 17u) == 0) {
-                return &rid->rx_window;
-            }
+    if (!req_id) {
+        return NULL;
+    }
+    for (step = 0u; step < PK_SESSION_REQ_ID_CAP; ++step) {
+        uint8_t pos = (uint8_t)((ctx->req_id_next[idx] + PK_SESSION_REQ_ID_CAP - 1u - step) %
+                                PK_SESSION_REQ_ID_CAP);
+        pk_session_req_id_t *rid = &ctx->req_ids[idx][pos];
+        if (rid->valid && memcmp(rid->req_id, req_id, 17u) == 0) {
+            return &rid->rx_window;
         }
     }
-    return &ctx->rx_window[idx];
+    /* Never fall back to the shared domain window. A missing note must not
+     * accept this signed response, or the next request's counter 0 is dropped. */
+    return NULL;
 }
 
 void pk_session_note_req_id(pk_session_ctx_t *ctx, int slot, uint32_t conn_gen,

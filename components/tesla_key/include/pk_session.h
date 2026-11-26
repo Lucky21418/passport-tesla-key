@@ -129,14 +129,20 @@ bool pk_session_accept_rx(const pk_session_ctx_t *ctx,
                           size_t *plain_len_out,
                           pk_evidence_t *evidence_out);
 
-/* Return the domain session anti-replay window (reset on conn_gen / epoch_gen). */
+/* Domain session anti-replay window (reset on conn_gen / epoch_gen).
+ * Signed responses do not use this window. */
 pk_proto_rx_window_t *pk_session_rx_window(pk_session_ctx_t *ctx, pk_proto_domain_t domain);
+
+/* Per-request window recorded by pk_session_note_req_id.
+ * Returns NULL when req_id is absent or was never noted. Does not fall back
+ * to the shared domain window. */
 pk_proto_rx_window_t *pk_session_rx_window_for_req(pk_session_ctx_t *ctx,
                                                    pk_proto_domain_t domain,
                                                    const uint8_t req_id[17]);
 
-/* Record a signed request's 17-byte req_id on the domain session so passive
- * AEAD observations can verify AAD even after the short-lived wire txn ends. */
+/* Record a signed request's 17-byte req_id before waiting for its signed
+ * response. That note owns the response anti-replay window. Passive AEAD
+ * observations use the same record after the wire txn ends. */
 void pk_session_note_req_id(pk_session_ctx_t *ctx, int slot, uint32_t conn_gen,
                             pk_proto_domain_t domain, const uint8_t req_id[17]);
 
@@ -147,14 +153,15 @@ typedef struct {
     const char                *vin;
     const pk_proto_session_t  *sess;
     const pk_proto_routable_t *rmsg;
-    const uint8_t             *req_id; /* optional explicit [17]; NULL uses domain session req_id ring */
+    const uint8_t             *req_id; /* optional explicit [17]; NULL scans noted req_ids only */
 } pk_session_obs_in_t;
 
 /* Passive authenticated state-observation RX track:
  * Accepts AEAD-authenticated vehicle state snapshots on the active domain
  * session even when no command txn is active or after a txn has ended.
- * Enforces conn_gen, valid session, domain match, AEAD auth-before-commit into
- * the session rx_window; never accepts unauthenticated plaintext. */
+ * Enforces conn_gen, valid session, domain match, and AEAD auth-before-commit
+ * into a noted request window. Never accepts unauthenticated plaintext and
+ * never uses the shared domain window. */
 bool pk_session_accept_observation_rx(pk_session_ctx_t *ctx,
                                       const pk_session_obs_in_t *in,
                                       uint8_t *plain_out, size_t plain_cap,

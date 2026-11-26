@@ -883,6 +883,151 @@ static void test_n01_to_n08_kernel(void)
     }
 }
 
+/* Signed responses bind to a noted req_id. A missing note must not accept
+ * through the shared domain window, or the next request's counter 0 is lost. */
+static void test_req_id_required_no_domain_fallback(void)
+{
+    pk_session_ctx_t ctx;
+    pk_proto_session_t sess;
+    pk_proto_routable_t rmsg;
+    pk_proto_rx_window_t private_win;
+    pk_proto_rx_window_t fresh;
+    uint8_t wire[512], req_wire[512];
+    uint8_t req_id_a[17], req_id_b[17], req_id_c[17], plain[256], inner[32];
+    uint8_t nonce_b[12] = { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 };
+    uint8_t nonce_c[12] = { 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 };
+    size_t wlen, plen = 0, ilen, rlen;
+    pk_evidence_t ev = PK_EVIDENCE_UNKNOWN;
+    pk_proto_rx_window_t *dom;
+    pk_proto_rx_window_t *win_b;
+    pk_proto_rx_window_t *win_c;
+
+    check(PK_PROTO_RX_WINDOW_SIZE == 32u,
+          "RID.0", "anti-replay window width stays 32");
+
+    pk_session_init(&ctx);
+    pk_session_set_conn_gen(&ctx, 10u);
+    pk_proto_session_clear(&sess);
+    pk_proto_rx_window_init(&private_win);
+    pk_proto_rx_window_init(&fresh);
+    memset(req_id_a, 0, sizeof(req_id_a));
+    memset(req_id_b, 0, sizeof(req_id_b));
+    memset(req_id_c, 0, sizeof(req_id_c));
+
+    pk_session_note_handshake_ex(&ctx, 0, 10u, PK_PROTO_DOMAIN_VEHICLE_SECURITY, ROUTE1, UUID1, 1000u);
+    wlen = build_sim_session_info_wire(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                       ROUTE1, UUID1, UUID1, VEC_VEH_PRIV, VEC_VEH_PUB,
+                                       VEC_EPOCH1, 6u, 2650u, false, 32u);
+    pk_proto_parse_routable(wire, wlen, &rmsg);
+    pk_session_apply_t ap = {
+        .slot = 0, .conn_gen = 10u, .domain = PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+        .vin = VEC_VIN, .privkey = VEC_CLIENT_PRIV, .rmsg = &rmsg,
+        .now_ms = 1050u, .session_now_ms = 1050u
+    };
+    check(pk_session_apply(&ctx, &ap, &sess) && sess.valid,
+          "RID.1", "session ready for req_id tests");
+
+    ilen = pk_proto_encode_vcsec_info_req(PK_PROTO_INFO_GET_STATUS, inner, sizeof(inner));
+    pk_proto_signed_req_t sreq = {
+        .route = { PK_PROTO_DOMAIN_VEHICLE_SECURITY, ROUTE1, UUID2 },
+        .vin = VEC_VIN, .client_pubkey = VEC_CLIENT_PUB,
+        .inner_payload = inner, .inner_len = ilen,
+        .nonce = NONCE1, .now_ms = 2000u, .ttl_seconds = 5u
+    };
+    rlen = pk_proto_build_signed_routable(&sreq, &sess, req_id_a, req_wire, sizeof(req_wire));
+    pk_session_note_request_ex(&ctx, 0, 10u, sess.epoch_gen, PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                               ROUTE1, UUID2, true, 2000u);
+    dom = pk_session_rx_window(&ctx, PK_PROTO_DOMAIN_VEHICLE_SECURITY);
+    check(rlen > 0u &&
+          req_id_a[0] == (uint8_t)Signatures_SignatureType_SIGNATURE_TYPE_AES_GCM_PERSONALIZED &&
+          pk_session_rx_window_for_req(&ctx, PK_PROTO_DOMAIN_VEHICLE_SECURITY, req_id_a) == NULL &&
+          pk_session_rx_window_for_req(&ctx, PK_PROTO_DOMAIN_VEHICLE_SECURITY, NULL) == NULL &&
+          dom != NULL && memcmp(dom, &fresh, sizeof(fresh)) == 0,
+          "RID.2", "signed request identity is absent until note_req_id; no domain-window fallback");
+
+    wlen = build_sim_vcsec_resp_wire(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                     ROUTE1, NULL, VEC_VIN, req_id_a, 0u, true, false, 16u, 12u, false);
+    pk_proto_parse_routable(wire, wlen, &rmsg);
+    pk_session_rx_in_t rx = {
+        .slot = 0, .conn_gen = 10u, .domain = PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+        .vin = VEC_VIN, .sess = &sess, .rmsg = &rmsg, .now_ms = 2200u,
+        .txn_active = true, .txn_slot = 0, .txn_conn_gen = 10u,
+        .txn_epoch_gen = sess.epoch_gen, .txn_deadline = 7000u,
+        .txn_routing_addr = ROUTE1, .txn_uuid = UUID2,
+        .txn_req_id = req_id_a,
+        .rx_window = pk_session_rx_window_for_req(&ctx, PK_PROTO_DOMAIN_VEHICLE_SECURITY, req_id_a)
+    };
+    check(!pk_session_accept_rx(&ctx, &rx, plain, sizeof(plain), &plen, &ev) &&
+          ev == PK_EVIDENCE_UNKNOWN && memcmp(dom, &fresh, sizeof(fresh)) == 0,
+          "RID.3", "unnoted signed response is rejected and does not consume the domain window");
+
+    rx.rx_window = &private_win;
+    check(pk_session_accept_rx(&ctx, &rx, plain, sizeof(plain), &plen, &ev) &&
+          ev == PK_EVIDENCE_CRYPTO_AUTHENTICATED && memcmp(dom, &fresh, sizeof(fresh)) == 0,
+          "RID.4", "the same counter 0 is authentic; rejection was the missing note, not the tag");
+
+    {
+        pk_session_obs_in_t obs = {
+            .slot = 0, .conn_gen = 10u, .domain = PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+            .vin = VEC_VIN, .sess = &sess, .rmsg = &rmsg, .req_id = req_id_a
+        };
+        plen = 0;
+        ev = PK_EVIDENCE_UNKNOWN;
+        check(!pk_session_accept_observation_rx(&ctx, &obs, plain, sizeof(plain), &plen, &ev) &&
+              memcmp(dom, &fresh, sizeof(fresh)) == 0,
+              "RID.5", "unnoted observation does not accept via the shared domain window");
+    }
+
+    wlen = build_sim_vcsec_resp_wire(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                     ROUTE1, NULL, VEC_VIN, req_id_a, 0u, false, false, 0u, 0u, false);
+    pk_proto_parse_routable(wire, wlen, &rmsg);
+    rx.rmsg = &rmsg;
+    rx.rx_window = NULL;
+    check(pk_session_accept_rx(&ctx, &rx, plain, sizeof(plain), &plen, &ev) &&
+          ev == PK_EVIDENCE_LEGACY_ATTRIBUTED,
+          "RID.6", "unsigned plaintext still accepts without a noted req_id");
+
+    sreq.nonce = nonce_b;
+    rlen = pk_proto_build_signed_routable(&sreq, &sess, req_id_b, req_wire, sizeof(req_wire));
+    pk_session_note_request_ex(&ctx, 0, 10u, sess.epoch_gen, PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                               ROUTE1, UUID2, true, 2100u);
+    pk_session_note_req_id(&ctx, 0, 10u, PK_PROTO_DOMAIN_VEHICLE_SECURITY, req_id_b);
+    win_b = pk_session_rx_window_for_req(&ctx, PK_PROTO_DOMAIN_VEHICLE_SECURITY, req_id_b);
+    check(rlen > 0u &&
+          req_id_b[0] == (uint8_t)Signatures_SignatureType_SIGNATURE_TYPE_AES_GCM_PERSONALIZED &&
+          win_b != NULL && win_b != dom,
+          "RID.7", "noting the signed request registers its own window, not the domain window");
+
+    wlen = build_sim_vcsec_resp_wire(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                     ROUTE1, NULL, VEC_VIN, req_id_b, 0u, true, false, 16u, 12u, false);
+    pk_proto_parse_routable(wire, wlen, &rmsg);
+    rx.rmsg = &rmsg;
+    rx.txn_req_id = req_id_b;
+    rx.rx_window = win_b;
+    check(pk_session_accept_rx(&ctx, &rx, plain, sizeof(plain), &plen, &ev) &&
+          ev == PK_EVIDENCE_CRYPTO_AUTHENTICATED && memcmp(dom, &fresh, sizeof(fresh)) == 0,
+          "RID.8", "noted request accepts counter 0 on its own window; domain window stays unused");
+    check(!pk_session_accept_rx(&ctx, &rx, plain, sizeof(plain), &plen, &ev),
+          "RID.9", "replay of counter 0 on the same noted request is rejected");
+
+    sreq.nonce = nonce_c;
+    rlen = pk_proto_build_signed_routable(&sreq, &sess, req_id_c, req_wire, sizeof(req_wire));
+    pk_session_note_request_ex(&ctx, 0, 10u, sess.epoch_gen, PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                               ROUTE1, UUID2, true, 2300u);
+    pk_session_note_req_id(&ctx, 0, 10u, PK_PROTO_DOMAIN_VEHICLE_SECURITY, req_id_c);
+    win_c = pk_session_rx_window_for_req(&ctx, PK_PROTO_DOMAIN_VEHICLE_SECURITY, req_id_c);
+    wlen = build_sim_vcsec_resp_wire(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                     ROUTE1, NULL, VEC_VIN, req_id_c, 0u, true, false, 16u, 12u, false);
+    pk_proto_parse_routable(wire, wlen, &rmsg);
+    rx.rmsg = &rmsg;
+    rx.txn_req_id = req_id_c;
+    rx.rx_window = win_c;
+    check(rlen > 0u && win_c != NULL && win_c != dom && win_c != win_b &&
+          pk_session_accept_rx(&ctx, &rx, plain, sizeof(plain), &plen, &ev) &&
+          ev == PK_EVIDENCE_CRYPTO_AUTHENTICATED && memcmp(dom, &fresh, sizeof(fresh)) == 0,
+          "RID.10", "next request counter 0 is kept because the missing note did not burn the domain window");
+}
+
 int main(void)
 {
     printf("=== S2 Security Pre-Gate & N01-N08 Kernel Suite ===\n");
@@ -891,6 +1036,7 @@ int main(void)
     test_pregate_3_rng_fail_closed();
     test_pregate_4_peer_identity_vs_continuity();
     test_n01_to_n08_kernel();
+    test_req_id_required_no_domain_fallback();
 
     printf("\nSUMMARY: %d PASS, %d FAIL (total %d)\n", g_pass, g_fail, g_pass + g_fail);
     return (g_fail == 0) ? 0 : 1;

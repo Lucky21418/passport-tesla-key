@@ -1498,6 +1498,83 @@ int main(void)
               "N16", "explicit vehicleLockState 0 is stored as unlocked");
     }
 
+    /* N17: every signed send notes req_id before waiting. The noted window is
+     * that request's window. An identity that was never noted has no window. */
+    {
+        pk_proto_rx_window_t *dom;
+        pk_proto_rx_window_t *mine;
+        uint8_t missing[17];
+        uint8_t si_wire[256];
+        uint8_t ep_v[16];
+        uint8_t ep_i[16];
+        pk_intent_t lock_in;
+        size_t slen;
+        bool direct_noted;
+        bool flush_noted;
+        bool probe_noted;
+
+        memset(missing, 0x5A, sizeof(missing));
+        setup_connected_slot0(247u, true);
+        lock_in = pk_app_make_intent(&g_app, PK_ACTION_LOCK);
+        (void)pk_app_commit(&g_app, &lock_in, g_now_ms);
+        dom = pk_session_rx_window(&s_session, PK_PROTO_DOMAIN_VEHICLE_SECURITY);
+        mine = pk_session_rx_window_for_req(&s_session, PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                            s_wire_txns[0].req_id);
+        direct_noted = s_wire_txns[0].active && !s_wire_txns[0].waiting_session &&
+                       s_wire_txns[0].req_id[0] ==
+                           (uint8_t)Signatures_SignatureType_SIGNATURE_TYPE_AES_GCM_PERSONALIZED &&
+                       mine != NULL && dom != NULL && mine != dom &&
+                       pk_session_rx_window_for_req(&s_session, PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                                    missing) == NULL;
+
+        setup_connected_slot0(247u, false);
+        g_app.now = g_now_ms;
+        lock_in = pk_app_make_intent(&g_app, PK_ACTION_LOCK);
+        (void)pk_app_commit(&g_app, &lock_in, g_now_ms);
+        flush_noted = s_wire_txns[0].active && s_wire_txns[0].waiting_session &&
+                      s_wire_txns[0].req_id[0] == 0;
+        memset(ep_v, 4, sizeof(ep_v));
+        slen = build_session_info_frame(
+            si_wire, sizeof(si_wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+            s_session.handshake[0].routing_addr, s_session.handshake[0].uuid,
+            port_slot_keys(0)->pubkey, ep_v, 11, 700, false, 0, NULL);
+        inject_rx_wire(si_wire, slen);
+        dom = pk_session_rx_window(&s_session, PK_PROTO_DOMAIN_VEHICLE_SECURITY);
+        mine = pk_session_rx_window_for_req(&s_session, PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                            s_wire_txns[0].req_id);
+        flush_noted = flush_noted && slen > 0 && s_wire_txns[0].active &&
+                      !s_wire_txns[0].waiting_session &&
+                      s_wire_txns[0].req_id[0] ==
+                          (uint8_t)Signatures_SignatureType_SIGNATURE_TYPE_AES_GCM_PERSONALIZED &&
+                      mine != NULL && dom != NULL && mine != dom;
+
+        setup_connected_slot0(247u, false);
+        memset(ep_v, 7, sizeof(ep_v));
+        memset(ep_i, 8, sizeof(ep_i));
+        slen = build_session_info_frame(
+            si_wire, sizeof(si_wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+            s_session.handshake[0].routing_addr, s_session.handshake[0].uuid,
+            port_slot_keys(0)->pubkey, ep_v, 12, 800, false, 0, NULL);
+        inject_rx_wire(si_wire, slen);
+        slen = build_session_info_frame(
+            si_wire, sizeof(si_wire), PK_PROTO_DOMAIN_INFOTAINMENT,
+            s_session.handshake[1].routing_addr, s_session.handshake[1].uuid,
+            port_slot_keys(0)->pubkey, ep_i, 21, 900, false, 0, NULL);
+        inject_rx_wire(si_wire, slen);
+        dom = pk_session_rx_window(&s_session, PK_PROTO_DOMAIN_VEHICLE_SECURITY);
+        mine = pk_session_rx_window_for_req(&s_session, PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                            s_wire_txns[0].req_id);
+        probe_noted = slen > 0 && s_wire_txns[0].active &&
+                      s_wire_txns[0].action == PK_ACTION_VCSEC_GET_STATUS_ONCE &&
+                      s_wire_txns[0].txn_id == 0u &&
+                      s_wire_txns[0].req_id[0] ==
+                          (uint8_t)Signatures_SignatureType_SIGNATURE_TYPE_AES_GCM_PERSONALIZED &&
+                      mine != NULL && dom != NULL && mine != dom;
+
+        check(direct_noted && flush_noted && probe_noted,
+              "N17", "signed lock, session flush, and status probe note req_id and skip the domain window");
+    }
+
     printf("\nSUMMARY: %d PASS, %d FAIL (total %d)\n", g_pass, g_fail, g_pass + g_fail);
     return (g_fail == 0) ? 0 : 1;
 }
