@@ -297,7 +297,9 @@ bool pk_session_accept_rx(const pk_session_ctx_t *ctx,
     }
     if ((idx = session_index(in->domain)) < 0 ||
         !in->rmsg->has_from_domain || in->rmsg->from_domain != in->domain ||
-        !in->rmsg->has_payload_bytes || in->rmsg->payload_len == 0u ||
+        !in->rmsg->has_payload_bytes ||
+        (in->rmsg->payload_len == 0u &&
+         !(in->domain == PK_PROTO_DOMAIN_VEHICLE_SECURITY && in->rmsg->has_aes_gcm_resp)) ||
         in->rmsg->payload_len > plain_cap) {
         return false;
     }

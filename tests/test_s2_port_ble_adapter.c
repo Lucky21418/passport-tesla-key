@@ -491,7 +491,7 @@ static size_t build_routable_resp(uint8_t *out, size_t cap,
         rm.signedMessageStatus.operation_status = UniversalMessage_OperationStatus_E_OPERATIONSTATUS_ERROR;
         rm.signedMessageStatus.signed_message_fault = (UniversalMessage_MessageFault_E)attach_fault;
     }
-    if (inner && inner_len > 0) {
+    if (inner) {
         rm.which_payload = UniversalMessage_RoutableMessage_protobuf_message_as_bytes_tag;
         if (encrypt && sess) {
             uint8_t nonce[12] = { 1,2,3,4,5,6,7,8,9,10,11,12 };
@@ -1644,6 +1644,96 @@ int main(void)
         check(fail_cccd_no_mtu && sub_then_mtu_ok && stale_conn_ignored &&
               cb_fail_fallback && imm_fail_fallback,
               "N18", "ExchangeMTU runs after CCCD subscribe and falls back to DefaultMTU-3 (20B) on failure");
+    }
+
+    /* N19: Official item 4 (A19/A20) — up to 3 VCSEC frames on one request with
+     * empty request_uuid (attributed by 16B routing_addr): WAIT is intermediate,
+     * bare OPERATIONSTATUS_ERROR is dropped while waiting for nominalError, and
+     * authenticated empty FromVCSECMessage completes LOCK into read-only verify. */
+    {
+        uint8_t plain[64], wire[256];
+        size_t plen, wlen;
+        VCSEC_FromVCSECMessage vm;
+        pb_ostream_t os;
+        pk_proto_key_slot_t *ks;
+        pk_intent_t intent;
+        bool after_wait;
+        bool after_bare_err;
+        bool after_nominal_err;
+        bool empty_starts_verify;
+
+        setup_connected_slot0(247u, true);
+        ks = port_slot_keys(0);
+        pk_app_vcsec_status(&g_app, false, PK_LOCK_READ_LOCKED);
+        intent = pk_app_make_intent(&g_app, PK_ACTION_UNLOCK);
+        (void)pk_app_commit(&g_app, &intent, g_app.now);
+
+        /* Frame 1 (counter=0, empty uuid): OPERATIONSTATUS_WAIT -> intermediate */
+        memset(&vm, 0, sizeof(vm));
+        vm.which_sub_message = VCSEC_FromVCSECMessage_commandStatus_tag;
+        vm.sub_message.commandStatus.operationStatus =
+            VCSEC_OperationStatus_E_OPERATIONSTATUS_WAIT;
+        os = pb_ostream_from_buffer(plain, sizeof(plain));
+        pb_encode(&os, VCSEC_FromVCSECMessage_fields, &vm);
+        plen = os.bytes_written;
+        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                   s_wire_txns[0].routing_addr, NULL,
+                                   plain, plen, &ks->vcsec, s_wire_txns[0].req_id,
+                                   true, 0u, false, 0);
+        inject_rx_wire(wire, wlen);
+        after_wait = (g_app.has_pending && g_app.pending.kind == PK_PENDING_COMMAND &&
+                      s_wire_txns[0].active);
+
+        /* Frame 2 (counter=1, empty uuid): bare OPERATIONSTATUS_ERROR -> dropped */
+        memset(&vm, 0, sizeof(vm));
+        vm.which_sub_message = VCSEC_FromVCSECMessage_commandStatus_tag;
+        vm.sub_message.commandStatus.operationStatus =
+            VCSEC_OperationStatus_E_OPERATIONSTATUS_ERROR;
+        os = pb_ostream_from_buffer(plain, sizeof(plain));
+        pb_encode(&os, VCSEC_FromVCSECMessage_fields, &vm);
+        plen = os.bytes_written;
+        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                   s_wire_txns[0].routing_addr, NULL,
+                                   plain, plen, &ks->vcsec, s_wire_txns[0].req_id,
+                                   true, 1u, false, 0);
+        inject_rx_wire(wire, wlen);
+        after_bare_err = (g_app.has_pending && g_app.pending.kind == PK_PENDING_COMMAND &&
+                          s_wire_txns[0].active);
+
+        /* Frame 3 (counter=2, empty uuid): nominalError -> terminal rejected */
+        memset(&vm, 0, sizeof(vm));
+        vm.which_sub_message = VCSEC_FromVCSECMessage_nominalError_tag;
+        vm.sub_message.nominalError.genericError = (Errors_GenericError_E)3;
+        os = pb_ostream_from_buffer(plain, sizeof(plain));
+        pb_encode(&os, VCSEC_FromVCSECMessage_fields, &vm);
+        plen = os.bytes_written;
+        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                   s_wire_txns[0].routing_addr, NULL,
+                                   plain, plen, &ks->vcsec, s_wire_txns[0].req_id,
+                                   true, 2u, false, 0);
+        inject_rx_wire(wire, wlen);
+        after_nominal_err = (!g_app.has_pending && g_app.vcsec_lock_state == PK_LOCK_READ_LOCKED);
+
+        /* Authenticated empty FromVCSECMessage on LOCK enters read-only verify */
+        setup_connected_slot0(247u, true);
+        ks = port_slot_keys(0);
+        pk_app_vcsec_status(&g_app, false, PK_LOCK_READ_UNLOCKED);
+        intent = pk_app_make_intent(&g_app, PK_ACTION_LOCK);
+        (void)pk_app_commit(&g_app, &intent, g_app.now);
+        wlen = build_routable_resp(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                   s_wire_txns[0].routing_addr, NULL,
+                                   plain, 0u, &ks->vcsec, s_wire_txns[0].req_id,
+                                   true, 0u, false, 0);
+        inject_rx_wire(wire, wlen);
+        empty_starts_verify = (g_app.has_pending &&
+                               g_app.pending.kind == PK_PENDING_LOCK_VERIFY &&
+                               g_app.pending.action == PK_ACTION_VCSEC_GET_STATUS_ONCE &&
+                               g_app.vcsec_lock_state == PK_LOCK_READ_UNLOCKED);
+
+        check(after_wait, "N19", "VCSEC frame 1 OPERATIONSTATUS_WAIT stays pending with empty uuid");
+        check(after_bare_err, "N19", "VCSEC frame 2 bare OPERATIONSTATUS_ERROR is dropped while waiting for nominalError");
+        check(after_nominal_err, "N19", "VCSEC frame 3 nominalError terminates pending command as rejected");
+        check(empty_starts_verify, "N19", "Authenticated empty FromVCSECMessage on LOCK enters read-only verify");
     }
 
     printf("\nSUMMARY: %d PASS, %d FAIL (total %d)\n", g_pass, g_fail, g_pass + g_fail);

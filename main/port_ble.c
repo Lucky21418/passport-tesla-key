@@ -1322,6 +1322,14 @@ static void handle_vcsec_msg(pk_app_t *app, const uint8_t *plain, size_t plain_l
         }
         return;
     }
+    if (vresp.has_nominal_error) {
+        if (crypto_auth) {
+            (void)pk_app_command_result(app, app->pending.id, PK_CMD_RESULT_REJECTED, true);
+        } else {
+            (void)pk_app_command_legacy_receipt(app, app->pending.id, PK_CMD_RESULT_REJECTED);
+        }
+        return;
+    }
     if (vresp.has_command_status) {
         pk_cmd_result_t r = PK_CMD_RESULT_UNCONFIRMED;
         if (vresp.op_status == 1) {
@@ -1329,6 +1337,11 @@ static void handle_vcsec_msg(pk_app_t *app, const uint8_t *plain, size_t plain_l
         } else if (vresp.op_status == 0) {
             r = PK_CMD_RESULT_ACCEPTED;
         } else if (vresp.op_status == 2) {
+            /* Official A19: bare OPERATIONSTATUS_ERROR on non-whitelist ops is
+             * for legacy clients; drop it and keep waiting for nominalError. */
+            if (!vresp.has_whitelist_status && vresp.signed_msg_fault == 0) {
+                return;
+            }
             r = PK_CMD_RESULT_REJECTED;
         } else {
             return;
@@ -1344,6 +1357,10 @@ static void handle_vcsec_msg(pk_app_t *app, const uint8_t *plain, size_t plain_l
         } else {
             (void)pk_app_command_legacy_receipt(app, app->pending.id, PK_CMD_RESULT_UNCONFIRMED);
         }
+    } else if (plain_len == 0u && crypto_auth && app->pending.kind == PK_PENDING_COMMAND) {
+        /* Official A19: empty authenticated FromVCSECMessage is terminal success
+         * for non-whitelist VCSEC commands (LOCK/UNLOCK still enter read-only verify). */
+        (void)pk_app_command_result(app, app->pending.id, PK_CMD_RESULT_ACCEPTED, true);
     }
 }
 
@@ -1997,7 +2014,10 @@ static void handle_rx_frame(pk_app_t *app, int slot, uint32_t conn_gen,
             return;
         }
     }
-    if (plain_len == 0) {
+    if (plain_len == 0 &&
+        !(rmsg.from_domain == PK_PROTO_DOMAIN_VEHICLE_SECURITY &&
+          evidence == PK_EVIDENCE_CRYPTO_AUTHENTICATED &&
+          app->has_pending && app->pending.kind == PK_PENDING_COMMAND)) {
         return;
     }
     if (evidence == PK_EVIDENCE_CRYPTO_AUTHENTICATED) {
