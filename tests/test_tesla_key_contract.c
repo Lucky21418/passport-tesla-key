@@ -3728,6 +3728,35 @@ static void test_command_observation_decoupling(void)
     }
 }
 
+static void test_disconnect_preserves_confirmed_lock_state(void)
+{
+    pk_app_t app;
+    pk_ble_adapter_t ad;
+    pk_btn_adapter_t btn;
+
+    /* 1. Confirmed LOCKED -> BLE disconnect preserves LOCKED */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    pk_app_vcsec_status(&app, false, PK_LOCK_READ_LOCKED);
+    expect(app.connected && app.vcsec_status_valid &&
+           app.vcsec_lock_state == PK_LOCK_READ_LOCKED,
+           "disc: pre-condition confirmed LOCKED");
+    pk_app_set_connected(&app, false);
+    expect(!app.connected && app.vcsec_status_valid &&
+           app.vcsec_lock_state == PK_LOCK_READ_LOCKED,
+           "disc: BLE disconnect preserves confirmed LOCKED");
+
+    /* 2. Confirmed UNLOCKED -> BLE disconnect preserves UNLOCKED */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    pk_app_vcsec_status(&app, false, PK_LOCK_READ_UNLOCKED);
+    expect(app.connected && app.vcsec_status_valid &&
+           app.vcsec_lock_state == PK_LOCK_READ_UNLOCKED,
+           "disc: pre-condition confirmed UNLOCKED");
+    pk_app_set_connected(&app, false);
+    expect(!app.connected && app.vcsec_status_valid &&
+           app.vcsec_lock_state == PK_LOCK_READ_UNLOCKED,
+           "disc: BLE disconnect preserves confirmed UNLOCKED");
+}
+
 int main(void)
 {
     test_unwired_not_success();
@@ -3781,6 +3810,7 @@ int main(void)
     test_double_click_option_e_regressions();
     test_deep_sleep_wake_guard_ring_replay();
     test_command_observation_decoupling();
+    test_disconnect_preserves_confirmed_lock_state();
     if (g_fail) {
         fprintf(stderr, "%d contract check(s) failed\n", g_fail);
         return 1;

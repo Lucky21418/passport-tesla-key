@@ -230,9 +230,11 @@ void pk_app_set_connected(pk_app_t *app, bool connected)
     app->connected = connected;
     app->connection++;
     app->status_too_large_mask = 0;
-    app->vcsec_status_valid = false;
+    if (connected) {
+        app->vcsec_status_valid = false;
+        app->vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
+    }
     app->vcsec_asleep = false;
-    app->vcsec_lock_state = PK_LOCK_READ_UNKNOWN;
     app->vcsec_observed_valid = false;
     app->vcsec_observed_asleep = false;
     app->vcsec_observed_lock_state = PK_LOCK_READ_UNKNOWN;
