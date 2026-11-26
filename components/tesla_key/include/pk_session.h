@@ -79,6 +79,8 @@ typedef struct {
     const uint8_t             *txn_uuid;         /* [PK_PROTO_UUID_LEN] */
     const uint8_t             *txn_req_id;       /* [17] */
     pk_proto_rx_window_t      *rx_window;
+    /* Reassembled BLE payload length. 0 leaves the 31/41-byte filter idle. */
+    size_t                     frame_len;
 } pk_session_rx_in_t;
 
 void pk_session_init(pk_session_ctx_t *ctx);
@@ -154,14 +156,28 @@ typedef struct {
     const pk_proto_session_t  *sess;
     const pk_proto_routable_t *rmsg;
     const uint8_t             *req_id; /* optional explicit [17]; NULL scans noted req_ids only */
+    /* Reassembled BLE payload length. 0 leaves the 31/41-byte filter idle. */
+    size_t                     frame_len;
+    /* Optional live routing address not yet stored on a session record. */
+    const uint8_t             *endpoint_routing; /* [PK_PROTO_ROUTING_ADDR_LEN] or NULL */
 } pk_session_obs_in_t;
+
+/* Issue #390 / P-05: a 31- or 41-byte frame is passive phone-key authentication.
+ * Returns true when it must be dropped because ToDestination does not match
+ * this endpoint (extra_routing, or a routing address recorded on ctx).
+ * Other lengths return false. A drop must not touch the anti-replay window. */
+bool pk_session_passive_auth_unmatched(const pk_session_ctx_t *ctx,
+                                      size_t frame_len,
+                                      const pk_proto_routable_t *msg,
+                                      const uint8_t *extra_routing);
 
 /* Passive authenticated state-observation RX track:
  * Accepts AEAD-authenticated vehicle state snapshots on the active domain
  * session even when no command txn is active or after a txn has ended.
  * Enforces conn_gen, valid session, domain match, and AEAD auth-before-commit
  * into a noted request window. Never accepts unauthenticated plaintext and
- * never uses the shared domain window. */
+ * never uses the shared domain window. Drops an unmatched 31/41-byte passive
+ * authentication frame before that window is touched. */
 bool pk_session_accept_observation_rx(pk_session_ctx_t *ctx,
                                       const pk_session_obs_in_t *in,
                                       uint8_t *plain_out, size_t plain_cap,

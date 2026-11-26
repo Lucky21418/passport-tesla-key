@@ -1196,6 +1196,172 @@ static void test_response_aad_counter_before_window(void)
           "A12.8", "observation accepts counter 9 after the failed tag when AAD uses that counter");
 }
 
+/* Issue #390 / P-05: after connect, 31- and 41-byte passive authentication
+ * frames that do not match this endpoint's routing address are dropped and
+ * must not enter the anti-replay window. A same-sized frame that does match
+ * is still eligible. */
+static void test_passive_auth_unmatched_not_in_window(void)
+{
+    pk_session_ctx_t ctx;
+    pk_session_ctx_t empty;
+    pk_proto_session_t sess;
+    pk_proto_routable_t rmsg;
+    pk_proto_routable_t raw;
+    pk_proto_rx_window_t *win;
+    pk_proto_rx_window_t snap;
+    pk_session_rx_in_t rx;
+    pk_session_obs_in_t obs;
+    uint8_t wire[512];
+    uint8_t req_wire[512];
+    uint8_t req_id[17];
+    uint8_t plain[256];
+    uint8_t inner[32];
+    uint8_t frame31[31];
+    uint8_t frame41[41];
+    size_t wlen;
+    size_t plen = 0;
+    size_t ilen;
+    size_t rlen;
+    pk_evidence_t ev = PK_EVIDENCE_UNKNOWN;
+    unsigned i;
+
+    pk_session_init(&ctx);
+    pk_session_init(&empty);
+    pk_session_set_conn_gen(&ctx, 10u);
+    pk_proto_session_clear(&sess);
+    memset(req_id, 0, sizeof(req_id));
+
+    pk_session_note_handshake_ex(&ctx, 0, 10u, PK_PROTO_DOMAIN_VEHICLE_SECURITY, ROUTE1, UUID1, 1000u);
+    wlen = build_sim_session_info_wire(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                       ROUTE1, UUID1, UUID1, VEC_VEH_PRIV, VEC_VEH_PUB,
+                                       VEC_EPOCH1, 6u, 2650u, false, 32u);
+    pk_proto_parse_routable(wire, wlen, &rmsg);
+    pk_session_apply_t ap = {
+        .slot = 0, .conn_gen = 10u, .domain = PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+        .vin = VEC_VIN, .privkey = VEC_CLIENT_PRIV, .rmsg = &rmsg,
+        .now_ms = 1050u, .session_now_ms = 1050u
+    };
+    check(wlen > 0u && pk_session_apply(&ctx, &ap, &sess) && sess.valid,
+          "P05.0", "session ready for passive-auth frame filter");
+
+    ilen = pk_proto_encode_vcsec_info_req(PK_PROTO_INFO_GET_STATUS, inner, sizeof(inner));
+    pk_proto_signed_req_t sreq = {
+        .route = { PK_PROTO_DOMAIN_VEHICLE_SECURITY, ROUTE1, UUID2 },
+        .vin = VEC_VIN, .client_pubkey = VEC_CLIENT_PUB,
+        .inner_payload = inner, .inner_len = ilen,
+        .nonce = NONCE1, .now_ms = 2000u, .ttl_seconds = 5u
+    };
+    rlen = pk_proto_build_signed_routable(&sreq, &sess, req_id, req_wire, sizeof(req_wire));
+    pk_session_note_request_ex(&ctx, 0, 10u, sess.epoch_gen, PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                               ROUTE1, UUID2, true, 2000u);
+    pk_session_note_req_id(&ctx, 0, 10u, PK_PROTO_DOMAIN_VEHICLE_SECURITY, req_id);
+    win = pk_session_rx_window_for_req(&ctx, PK_PROTO_DOMAIN_VEHICLE_SECURITY, req_id);
+    check(rlen > 0u && win != NULL,
+          "P05.1", "endpoint routing address ROUTE1 is recorded with its window");
+
+    wlen = build_sim_vcsec_resp_wire_ex(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                        ROUTE1, NULL, VEC_VIN, req_id,
+                                        0u, 0u, true, false, 16u, 12u, false);
+    pk_proto_parse_routable(wire, wlen, &rmsg);
+    rx = (pk_session_rx_in_t){
+        .slot = 0, .conn_gen = 10u, .domain = PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+        .vin = VEC_VIN, .sess = &sess, .rmsg = &rmsg, .now_ms = 2200u,
+        .txn_active = true, .txn_slot = 0, .txn_conn_gen = 10u,
+        .txn_epoch_gen = sess.epoch_gen, .txn_deadline = 7000u,
+        .txn_routing_addr = ROUTE1, .txn_uuid = UUID2,
+        .txn_req_id = req_id, .rx_window = win, .frame_len = 0u
+    };
+    check(wlen > 0u && pk_session_accept_rx(&ctx, &rx, plain, sizeof(plain), &plen, &ev) &&
+          win->used && win->counter == 0u,
+          "P05.2", "matching response still enters the window");
+    memcpy(&snap, win, sizeof(snap));
+
+    /* Same decryptable body, addressed to a different endpoint, declared as
+     * the 31-byte passive-auth size. Observation would otherwise commit. */
+    wlen = build_sim_vcsec_resp_wire_ex(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                        ROUTE2, NULL, VEC_VIN, req_id,
+                                        3u, 3u, true, false, 16u, 12u, false);
+    check(wlen > 0u && pk_proto_parse_routable(wire, wlen, &rmsg) &&
+          rmsg.has_to_routing_addr &&
+          pk_session_passive_auth_unmatched(&ctx, 31u, &rmsg, NULL) &&
+          pk_session_passive_auth_unmatched(&ctx, 31u, &rmsg, ROUTE1),
+          "P05.3", "31-byte frame with a foreign routing address is unmatched");
+    obs = (pk_session_obs_in_t){
+        .slot = 0, .conn_gen = 10u, .domain = PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+        .vin = VEC_VIN, .sess = &sess, .rmsg = &rmsg, .req_id = req_id,
+        .frame_len = 31u, .endpoint_routing = ROUTE1
+    };
+    plen = 0;
+    ev = PK_EVIDENCE_UNKNOWN;
+    check(!pk_session_accept_observation_rx(&ctx, &obs, plain, sizeof(plain), &plen, &ev) &&
+          memcmp(win, &snap, sizeof(snap)) == 0,
+          "P05.4", "unmatched 31-byte passive auth is dropped and does not enter the window");
+
+    wlen = build_sim_vcsec_resp_wire_ex(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                        ROUTE1, NULL, VEC_VIN, req_id,
+                                        3u, 3u, true, false, 16u, 12u, false);
+    check(wlen > 0u && pk_proto_parse_routable(wire, wlen, &rmsg) &&
+          !pk_session_passive_auth_unmatched(&ctx, 31u, &rmsg, ROUTE1) &&
+          pk_session_accept_observation_rx(&ctx, &obs, plain, sizeof(plain), &plen, &ev) &&
+          ev == PK_EVIDENCE_CRYPTO_AUTHENTICATED &&
+          win->used && win->counter == 3u,
+          "P05.5", "31-byte frame that matches this endpoint still enters the window");
+    memcpy(&snap, win, sizeof(snap));
+
+    wlen = build_sim_vcsec_resp_wire_ex(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                        ROUTE2, NULL, VEC_VIN, req_id,
+                                        4u, 4u, true, false, 16u, 12u, false);
+    obs.frame_len = 41u;
+    obs.endpoint_routing = NULL;
+    check(wlen > 0u && pk_proto_parse_routable(wire, wlen, &rmsg) &&
+          pk_session_passive_auth_unmatched(&ctx, 41u, &rmsg, NULL) &&
+          !pk_session_accept_observation_rx(&ctx, &obs, plain, sizeof(plain), &plen, &ev) &&
+          memcmp(win, &snap, sizeof(snap)) == 0 &&
+          !pk_session_passive_auth_unmatched(&ctx, 40u, &rmsg, NULL) &&
+          !pk_session_passive_auth_unmatched(&ctx, 42u, &rmsg, NULL),
+          "P05.6", "unmatched 41-byte passive auth is dropped and does not enter the window");
+
+    /* Exact 31- and 41-byte bodies: field 6 routing address, field 7 domain,
+     * field 10 payload padded so the encoded size is the passive-auth length. */
+    memset(frame31, 0, sizeof(frame31));
+    frame31[0] = 0x32;
+    frame31[1] = 18;
+    frame31[2] = 0x12;
+    frame31[3] = 16;
+    memcpy(frame31 + 4, ROUTE2, 16);
+    frame31[20] = 0x3a;
+    frame31[21] = 2;
+    frame31[22] = 0x08;
+    frame31[23] = 2;
+    frame31[24] = 0x52;
+    frame31[25] = 5;
+    for (i = 0; i < 5u; i++) {
+        frame31[26u + i] = (uint8_t)(0xA0u + i);
+    }
+    memset(frame41, 0, sizeof(frame41));
+    memcpy(frame41, frame31, 24);
+    frame41[24] = 0x52;
+    frame41[25] = 15;
+    for (i = 0; i < 15u; i++) {
+        frame41[26u + i] = (uint8_t)i;
+    }
+    check(pk_proto_parse_routable(frame31, sizeof(frame31), &raw) &&
+          raw.has_to_routing_addr &&
+          memcmp(raw.to_routing_addr, ROUTE2, 16) == 0 &&
+          pk_session_passive_auth_unmatched(&empty, sizeof(frame31), &raw, NULL) &&
+          !pk_session_passive_auth_unmatched(&empty, sizeof(frame31), &raw, ROUTE2) &&
+          pk_proto_parse_routable(frame41, sizeof(frame41), &raw) &&
+          pk_session_passive_auth_unmatched(&ctx, sizeof(frame41), &raw, ROUTE1) &&
+          !pk_session_passive_auth_unmatched(&ctx, sizeof(frame41), &raw, ROUTE2),
+          "P05.7", "exact 31- and 41-byte frames follow the routing-address rule");
+    obs.rmsg = &raw;
+    obs.frame_len = sizeof(frame41);
+    obs.endpoint_routing = ROUTE1;
+    check(!pk_session_accept_observation_rx(&ctx, &obs, plain, sizeof(plain), &plen, &ev) &&
+          memcmp(win, &snap, sizeof(snap)) == 0,
+          "P05.8", "exact 41-byte foreign frame does not move the window");
+}
+
 int main(void)
 {
     printf("=== S2 Security Pre-Gate & N01-N08 Kernel Suite ===\n");
@@ -1206,6 +1372,7 @@ int main(void)
     test_n01_to_n08_kernel();
     test_req_id_required_no_domain_fallback();
     test_response_aad_counter_before_window();
+    test_passive_auth_unmatched_not_in_window();
 
     printf("\nSUMMARY: %d PASS, %d FAIL (total %d)\n", g_pass, g_fail, g_pass + g_fail);
     return (g_fail == 0) ? 0 : 1;

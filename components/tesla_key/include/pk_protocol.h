@@ -36,6 +36,10 @@ extern "C" {
 #define PK_PROTO_UUID_LEN            16
 #define PK_PROTO_MAX_FRAME_LEN       1024
 #define PK_PROTO_RX_TIMEOUT_MS       1000u
+/* Issue #390 passive phone-key authentication messages. Length is the
+ * reassembled payload (the 2-byte big-endian prefix value). */
+#define PK_PROTO_PASSIVE_AUTH_LEN_A  31u
+#define PK_PROTO_PASSIVE_AUTH_LEN_B  41u
 /* UniversalMessage.Flags: request encrypted responses on every signed BLE command. */
 #define PK_PROTO_FLAG_ENCRYPT_RESPONSE 0x00000002u
 
@@ -420,7 +424,9 @@ void pk_rx_framer_init(pk_rx_framer_t *f);
 /* Streaming feed: writes consumed bytes into *consumed_out so callers loop
  * over coalesced frames and keep trailing prefixes across notifications.
  * Returns 1 on complete frame in f->buf[0..f->expected_len-1], 0 when more
- * bytes are needed, -1 on zero-len / oversize / invalid argument. */
+ * bytes are needed, -1 on zero-len / oversize / invalid argument.
+ * A declared length of 0 or above PK_PROTO_MAX_FRAME_LEN discards the rest
+ * of this chunk and resets the framer. The tail is not scanned for a header. */
 int pk_rx_framer_feed_ex(pk_rx_framer_t *f, const uint8_t *chunk, size_t chunk_len,
                          pk_ms_t now_ms, size_t *consumed_out);
 int pk_rx_framer_feed(pk_rx_framer_t *f, const uint8_t *chunk, size_t chunk_len, pk_ms_t now_ms);

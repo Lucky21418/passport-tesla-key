@@ -182,6 +182,79 @@ static void test_max_length_frame(void)
     expect(f.expected_len == PK_PROTO_MAX_FRAME_LEN, "framing: max length preserved");
 }
 
+/* Feed one buffer the way a caller would if it kept going after an error
+ * by advancing `consumed`. An illegal length must consume the whole chunk
+ * so a later valid frame in that chunk is not assembled. */
+static int drain_frames(pk_rx_framer_t *f, const uint8_t *buf, size_t len, pk_ms_t now)
+{
+    size_t off = 0u;
+    int frames = 0;
+
+    while (off < len) {
+        size_t consumed = 0u;
+        int rc = pk_rx_framer_feed_ex(f, buf + off, len - off, now, &consumed);
+
+        if (rc == 1) {
+            frames++;
+        }
+        if (rc < 0) {
+            if (consumed == 0u) {
+                break;
+            }
+            off += consumed;
+            continue;
+        }
+        if (consumed == 0u) {
+            break;
+        }
+        off += consumed;
+    }
+    return frames;
+}
+
+static void test_no_heuristic_header_search(void)
+{
+    uint8_t framed[PK_PROTO_MAX_FRAME_LEN + 2];
+    uint8_t blob[2 + PK_PROTO_MAX_FRAME_LEN + 2];
+    pk_rx_framer_t f;
+    size_t len = make_frame(framed, sizeof(framed), 0x5C, 8);
+    size_t consumed = 0u;
+
+    blob[0] = 0x00;
+    blob[1] = 0x00;
+    memcpy(blob + 2, framed, len);
+    pk_rx_framer_init(&f);
+    expect(drain_frames(&f, blob, len + 2u, 10) == 0,
+           "framing: zero length does not assemble the following frame");
+    expect(f.active == false && f.len_received == 0 && f.err_zero_len == 1u,
+           "framing: zero length discards the chunk and resets");
+
+    blob[0] = 0x04;
+    blob[1] = 0x01; /* 1025 > 1024 */
+    pk_rx_framer_init(&f);
+    expect(pk_rx_framer_feed_ex(&f, blob, len + 2u, 20, &consumed) == -1 &&
+           consumed == len + 2u,
+           "framing: oversize length consumes the whole chunk");
+    expect(f.active == false && f.len_received == 0 && f.err_oversize == 1u,
+           "framing: oversize length resets the framer");
+    expect(drain_frames(&f, blob, len + 2u, 20) == 0,
+           "framing: oversize length does not assemble the following frame");
+
+    /* A later notification, after the reset, is still a new frame. */
+    expect(pk_rx_framer_feed(&f, framed, len, 30) == 1 && f.expected_len == 8,
+           "framing: valid frame after discard-and-reset is accepted");
+
+    /* One junk byte then a real header. Sliding to that header is the search
+     * this framer must not do. 0xFF plus the real high length byte is > 1024. */
+    blob[0] = 0xFF;
+    memcpy(blob + 1, framed, len);
+    pk_rx_framer_init(&f);
+    expect(drain_frames(&f, blob, len + 1u, 40) == 0,
+           "framing: junk prefix is not scanned for a later header");
+    expect(f.active == false && f.len_received == 0,
+           "framing: junk prefix resets instead of resyncing");
+}
+
 static void test_arguments_and_empty_chunk(void)
 {
     uint8_t framed[PK_PROTO_MAX_FRAME_LEN + 2];
@@ -203,6 +276,7 @@ int main(void)
     test_coalesced_frames_and_trailing_prefix();
     test_inter_chunk_timeout();
     test_bad_lengths();
+    test_no_heuristic_header_search();
     test_max_length_frame();
     test_arguments_and_empty_chunk();
 

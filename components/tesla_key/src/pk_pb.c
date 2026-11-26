@@ -40,6 +40,23 @@ static void rx_framer_reset_partial(pk_rx_framer_t *f)
     f->active = false;
 }
 
+/* Declared length 0 or above the 1024-byte cap: drop this chunk and reset.
+ * Do not slide forward looking for a later length header. */
+static int rx_framer_reject_declared_len(pk_rx_framer_t *f, size_t chunk_len,
+                                         size_t *consumed_out, bool oversize)
+{
+    if (oversize) {
+        f->err_oversize++;
+    } else {
+        f->err_zero_len++;
+    }
+    rx_framer_reset_partial(f);
+    if (consumed_out) {
+        *consumed_out = chunk_len;
+    }
+    return -1;
+}
+
 void pk_rx_framer_init(pk_rx_framer_t *f)
 {
     if (!f) {
@@ -76,20 +93,10 @@ int pk_rx_framer_feed_ex(pk_rx_framer_t *f, const uint8_t *chunk, size_t chunk_l
             f->expected_len = ((size_t)f->len_bytes[0] << 8) | (size_t)f->len_bytes[1];
             f->received_len = 0u;
             if (f->expected_len == 0u) {
-                f->err_zero_len++;
-                rx_framer_reset_partial(f);
-                if (consumed_out) {
-                    *consumed_out = i;
-                }
-                return -1;
+                return rx_framer_reject_declared_len(f, chunk_len, consumed_out, false);
             }
             if (f->expected_len > PK_PROTO_MAX_FRAME_LEN) {
-                f->err_oversize++;
-                rx_framer_reset_partial(f);
-                if (consumed_out) {
-                    *consumed_out = i;
-                }
-                return -1;
+                return rx_framer_reject_declared_len(f, chunk_len, consumed_out, true);
             }
         }
     }

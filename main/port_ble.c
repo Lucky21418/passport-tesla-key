@@ -633,6 +633,7 @@ static void handle_ble_notify_rx(struct ble_gap_event *event)
                 }
             }
         }
+        /* Illegal length already discarded this chunk. Do not scan the tail. */
         if (consumed == 0 || rc < 0) {
             break;
         }
@@ -1745,6 +1746,31 @@ static bool apply_rx_session_info(pk_app_t *app, int slot, uint32_t conn_gen,
     return true;
 }
 
+static bool drop_unmatched_passive_auth(size_t frame_len, const pk_proto_routable_t *rmsg)
+{
+    const uint8_t *live[2];
+    int n = 0;
+    int i;
+
+    if (!rmsg) {
+        return false;
+    }
+    for (i = 0; i < 2; i++) {
+        if (s_wire_txns[i].conn_gen != 0u) {
+            live[n++] = s_wire_txns[i].routing_addr;
+        }
+    }
+    if (n == 0) {
+        return pk_session_passive_auth_unmatched(&s_session, frame_len, rmsg, NULL);
+    }
+    for (i = 0; i < n; i++) {
+        if (!pk_session_passive_auth_unmatched(&s_session, frame_len, rmsg, live[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static void handle_rx_frame(pk_app_t *app, int slot, uint32_t conn_gen,
                             const uint8_t *buf, size_t len)
 {
@@ -1782,6 +1808,11 @@ static void handle_rx_frame(pk_app_t *app, int slot, uint32_t conn_gen,
     }
 
     if (!pk_proto_parse_routable(buf, len, &rmsg)) {
+        return;
+    }
+    /* After connect, a 31/41-byte passive auth frame for some other routing
+     * address is discarded here, before session apply or the anti-replay window. */
+    if (drop_unmatched_passive_auth(len, &rmsg)) {
         return;
     }
 
@@ -1832,6 +1863,7 @@ static void handle_rx_frame(pk_app_t *app, int slot, uint32_t conn_gen,
                     .txn_uuid         = ftxn->uuid,
                     .txn_req_id       = ftxn->req_id,
                     .rx_window        = pk_session_rx_window_for_req(&s_session, dom, ftxn->req_id),
+                    .frame_len        = len,
                 };
                 pk_evidence_t chk_ev = PK_EVIDENCE_UNKNOWN;
                 size_t chk_len = 0;
@@ -1898,6 +1930,7 @@ static void handle_rx_frame(pk_app_t *app, int slot, uint32_t conn_gen,
             .txn_uuid         = txn->uuid,
             .txn_req_id       = txn->req_id,
             .rx_window        = pk_session_rx_window_for_req(&s_session, rmsg.from_domain, txn->req_id),
+            .frame_len        = len,
         };
         if (!pk_session_accept_rx(&s_session, &rx_in, s_rx_plain, sizeof(s_rx_plain),
                                   &plain_len, &evidence)) {
@@ -1912,6 +1945,8 @@ static void handle_rx_frame(pk_app_t *app, int slot, uint32_t conn_gen,
                 .vin      = vin,
                 .sess     = sess,
                 .rmsg     = &rmsg,
+                .frame_len = len,
+                .endpoint_routing = (txn->conn_gen != 0u) ? txn->routing_addr : NULL,
             };
             if (slot != app->vehicle || slot == PK_VEHICLE_NONE ||
                 !pk_session_accept_observation_rx(&s_session, &obs_in,

@@ -133,6 +133,46 @@ static bool route_matches_ref(const pk_session_ref_t *ref, const pk_proto_routab
            memcmp(rmsg->to_routing_addr, ref->routing_addr, PK_PROTO_ROUTING_ADDR_LEN) == 0;
 }
 
+static bool routing_bytes_match(const uint8_t *endpoint, const pk_proto_routable_t *msg)
+{
+    return endpoint && msg && msg->has_to_routing_addr &&
+           memcmp(msg->to_routing_addr, endpoint, PK_PROTO_ROUTING_ADDR_LEN) == 0;
+}
+
+bool pk_session_passive_auth_unmatched(const pk_session_ctx_t *ctx,
+                                      size_t frame_len,
+                                      const pk_proto_routable_t *msg,
+                                      const uint8_t *extra_routing)
+{
+    int dom;
+
+    if (frame_len != PK_PROTO_PASSIVE_AUTH_LEN_A &&
+        frame_len != PK_PROTO_PASSIVE_AUTH_LEN_B) {
+        return false;
+    }
+    if (routing_bytes_match(extra_routing, msg)) {
+        return false;
+    }
+    if (ctx && msg && msg->has_to_routing_addr) {
+        for (dom = 0; dom < PK_SESSION_DOMAIN_COUNT; dom++) {
+            const pk_session_ref_t *recs[3];
+            int i;
+
+            recs[0] = &ctx->handshake[dom];
+            recs[1] = &ctx->request[dom];
+            recs[2] = &ctx->signed_request[dom];
+            for (i = 0; i < 3; i++) {
+                if (recs[i]->valid && recs[i]->has_routing_addr &&
+                    memcmp(msg->to_routing_addr, recs[i]->routing_addr,
+                           PK_PROTO_ROUTING_ADDR_LEN) == 0) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 bool pk_session_apply(pk_session_ctx_t *ctx, const pk_session_apply_t *in,
                       pk_proto_session_t *sess)
 {
@@ -249,6 +289,10 @@ bool pk_session_accept_rx(const pk_session_ctx_t *ctx,
         *plain_len_out = 0u;
     }
     if (!ctx || !in || !in->rmsg || !plain_out || !plain_len_out || !evidence_out) {
+        return false;
+    }
+    /* Unmatched 31/41-byte passive auth never reaches the anti-replay window. */
+    if (pk_session_passive_auth_unmatched(ctx, in->frame_len, in->rmsg, in->txn_routing_addr)) {
         return false;
     }
     if ((idx = session_index(in->domain)) < 0 ||
@@ -398,6 +442,10 @@ bool pk_session_accept_observation_rx(pk_session_ctx_t *ctx,
         !in->rmsg->has_from_domain || in->rmsg->from_domain != in->domain ||
         !in->rmsg->has_payload_bytes || in->rmsg->payload_len == 0u ||
         in->rmsg->payload_len > plain_cap) {
+        return false;
+    }
+    /* Unmatched 31/41-byte passive auth never reaches the anti-replay window. */
+    if (pk_session_passive_auth_unmatched(ctx, in->frame_len, in->rmsg, in->endpoint_routing)) {
         return false;
     }
     /* Passive state observations MUST be cryptographically authenticated;
