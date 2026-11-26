@@ -303,7 +303,7 @@ static void test_wake_budget(void)
     app.vcsec_lock_state = PK_LOCK_READ_LOCKED;
     pk_app_open_status(&app, PK_ORIGIN_LIST);
     expect(g_wakes == 0 && app.pending.kind == PK_PENDING_STATUS &&
-           app.pending.action == PK_ACTION_STATUS_READ &&
+           app.pending.action == PK_ACTION_VCSEC_GET_STATUS_ONCE &&
            !app.wake_spent && app.vcsec_lock_state == PK_LOCK_READ_LOCKED,
            "N09: opening status while asleep does not send WAKE_VEHICLE");
     wakes = g_wakes;
@@ -907,7 +907,7 @@ static void test_status_wake_deadline(void)
     pk_app_open_status(&app, PK_ORIGIN_LIST);
     expect(g_wakes == 0 && !app.wake_spent && !app.wake_then_status &&
            app.pending.kind == PK_PENDING_STATUS &&
-           app.pending.action == PK_ACTION_STATUS_READ &&
+           app.pending.action == PK_ACTION_VCSEC_GET_STATUS_ONCE &&
            app.pending.deadline == started + PK_STATUS_READ_MS &&
            app.vcsec_lock_state == PK_LOCK_READ_LOCKED,
            "status: known-asleep open reads status and does not wake");

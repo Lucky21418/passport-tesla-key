@@ -1952,6 +1952,7 @@ static void test_status_reads_one_section_per_request(void)
     ad.connected_slot = app.vehicle;
     pk_app_set_connected(&app, true);
     pk_app_tick(&app, 1000);
+    pk_app_vcsec_status(&app, false, PK_LOCK_READ_LOCKED);
 
     pk_app_open_status(&app, PK_ORIGIN_LIST);
     for (section = 0; section < PK_STATUS_SECTION_COUNT; section++) {
@@ -2056,6 +2057,7 @@ static void setup_status_planner_test(pk_app_t *app, pk_ble_adapter_t *ad, bool 
     expect(add_and_select(app, VIN_A) >= 0, "status planner: add VIN_A");
     ad->connected_slot = app->vehicle;
     pk_app_set_connected(app, true);
+    pk_app_vcsec_status(app, false, PK_LOCK_READ_LOCKED);
     pk_app_tick(app, 1000);
 }
 
@@ -3240,6 +3242,7 @@ static void test_double_click_option_e_regressions(void)
             pk_ms_t t = 1100u;
             pk_ms_t gap = gaps[i];
             setup_connected_main_for_keys(&app, &ad, &btn);
+            pk_app_vcsec_status(&app, false, PK_LOCK_READ_LOCKED);
             feed_adc_span(&app, &btn, t, t + 100u, 303, true);          t += 100u;
             feed_adc_span(&app, &btn, t, t + gap, 2950, true);          t += gap;
             feed_adc_span(&app, &btn, t, t + 100u, 303, true);          t += 100u;

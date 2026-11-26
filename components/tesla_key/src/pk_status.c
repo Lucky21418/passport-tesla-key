@@ -100,6 +100,24 @@ void pk_app_open_status(pk_app_t *app, pk_origin_t origin)
     app->status_step = 0;
     app->status_skip_mask = 0;
     app->status_need_send = false;
+    if (!app->vcsec_status_valid || app->vcsec_asleep) {
+        /* Official A24/A26: when the vehicle is asleep or sleep state is not yet
+         * confirmed awake, keep status refresh on VCSEC without waking or
+         * handshaking Infotainment. */
+        memset(&app->pending, 0, sizeof(app->pending));
+        p = &app->pending;
+        p->kind = PK_PENDING_STATUS;
+        p->id = app->serial;
+        p->scope = pk_app_scope(app);
+        p->deadline = status_section_deadline(app);
+        p->action = PK_ACTION_VCSEC_GET_STATUS_ONCE;
+        app->has_pending = true;
+        pk_ble_release_in_flight(app);
+        (void)pk_ble_send_once(app, PK_DOMAIN_VCSEC,
+                               PK_ACTION_VCSEC_GET_STATUS_ONCE, p->deadline);
+        pk_app_log(app, PK_LOG_EVENT_QUERY, PK_LOG_ERR_NONE);
+        return;
+    }
     first = status_next_section(app, 0);
     if (first < 0) {
         status_finish_too_large(app);

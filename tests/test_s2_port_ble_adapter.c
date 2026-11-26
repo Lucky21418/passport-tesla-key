@@ -916,6 +916,7 @@ int main(void)
 
         /* D2: Same NaN DriveState + ChargeState(SOC=82) during PK_PENDING_STATUS preserves SOC=82 */
         setup_connected_slot0(247u, true);
+        pk_app_vcsec_status(&g_app, false, PK_LOCK_READ_LOCKED);
         pk_app_open_status(&g_app, PK_ORIGIN_LIST);
         cr.response_msg.vehicleData.has_charge_state = true;
         cr.response_msg.vehicleData.charge_state.which_optional_battery_level =
@@ -1056,7 +1057,7 @@ int main(void)
             int gatt_before_status = g_gatt_write_calls;
             pk_app_open_status(&g_app, PK_ORIGIN_LIST);
             check(g_app.pending.kind == PK_PENDING_STATUS &&
-                  g_app.pending.action == PK_ACTION_STATUS_READ &&
+                  g_app.pending.action == PK_ACTION_VCSEC_GET_STATUS_ONCE &&
                   !g_app.wake_spent && !g_app.wake_then_status &&
                   g_app.vcsec_status_valid &&
                   g_app.vcsec_lock_state == PK_LOCK_READ_LOCKED &&
@@ -1242,6 +1243,7 @@ int main(void)
         /* L4: Legacy Infotainment status observation vs Park qualification separation */
         setup_connected_slot0(247u, true);
         g_app.caps.adapter_verified = false;
+        pk_app_vcsec_status(&g_app, false, PK_LOCK_READ_LOCKED);
         pk_app_open_status(&g_app, PK_ORIGIN_LIST);
         memset(&cr, 0, sizeof(cr));
         cr.which_response_msg = CarServer_Response_vehicleData_tag;
@@ -1787,6 +1789,63 @@ int main(void)
 
         check(vcsec_only_after_connect && pure_vcsec_no_info_hs && info_on_demand,
               "N20", "pure VCSEC connect/lock/unlock/trunk/frunk/status never handshake Infotainment; Infotainment handshakes on demand");
+    }
+
+    /* N21: Official item 6 (A24/A26) — opening status page when vehicle is known
+     * asleep OR sleep state is unknown AND no Infotainment session exists MUST
+     * stay on VCSEC (GET_STATUS_ONCE), with NO WAKE_VEHICLE, NO Infotainment
+     * GetVehicleData, and NO Infotainment SessionInfo handshake. */
+    {
+        uint8_t si_wire[256];
+        uint8_t ep_v[16] = { 10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10 };
+        pk_proto_key_slot_t *ks;
+        size_t slen;
+        bool asleep_stays_vcsec;
+        bool unknown_stays_vcsec;
+
+        /* 1. Known-asleep + VCSEC session only (no Infotainment session) */
+        setup_connected_slot0(247u, false);
+        ks = port_slot_keys(0);
+        slen = build_session_info_frame(
+            si_wire, sizeof(si_wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+            s_session.handshake[0].routing_addr, s_session.handshake[0].uuid,
+            ks->pubkey, ep_v, 10, 500, false, 0, NULL);
+        inject_rx_wire(si_wire, slen);
+        memset(s_wire_txns, 0, sizeof(s_wire_txns));
+        g_ble.in_flight = false;
+        pk_app_vcsec_status(&g_app, true, PK_LOCK_READ_LOCKED);
+        pk_app_open_status(&g_app, PK_ORIGIN_LIST);
+        asleep_stays_vcsec = (g_app.page == PK_PAGE_STATUS &&
+                              g_app.has_pending &&
+                              g_app.pending.kind == PK_PENDING_STATUS &&
+                              g_app.pending.action == PK_ACTION_VCSEC_GET_STATUS_ONCE &&
+                              !s_session.handshake[1].valid &&
+                              !ks->infotainment.valid &&
+                              !s_wire_txns[1].active);
+
+        /* 2. Sleep-unknown (vcsec_status_valid == false) + VCSEC session only */
+        setup_connected_slot0(247u, false);
+        ks = port_slot_keys(0);
+        slen = build_session_info_frame(
+            si_wire, sizeof(si_wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+            s_session.handshake[0].routing_addr, s_session.handshake[0].uuid,
+            ks->pubkey, ep_v, 10, 500, false, 0, NULL);
+        inject_rx_wire(si_wire, slen);
+        memset(s_wire_txns, 0, sizeof(s_wire_txns));
+        g_ble.in_flight = false;
+        g_app.vcsec_status_valid = false;
+        g_app.vcsec_asleep = false;
+        pk_app_open_status(&g_app, PK_ORIGIN_LIST);
+        unknown_stays_vcsec = (g_app.page == PK_PAGE_STATUS &&
+                               g_app.has_pending &&
+                               g_app.pending.kind == PK_PENDING_STATUS &&
+                               g_app.pending.action == PK_ACTION_VCSEC_GET_STATUS_ONCE &&
+                               !s_session.handshake[1].valid &&
+                               !ks->infotainment.valid &&
+                               !s_wire_txns[1].active);
+
+        check(asleep_stays_vcsec && unknown_stays_vcsec,
+              "N21", "asleep/unknown status open with no Infotainment session stays on VCSEC (no wake, no GetVehicleData, no Infotainment SessionInfo)");
     }
 
     printf("\nSUMMARY: %d PASS, %d FAIL (total %d)\n", g_pass, g_fail, g_pass + g_fail);
