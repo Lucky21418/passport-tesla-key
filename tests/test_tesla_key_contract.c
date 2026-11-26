@@ -21,6 +21,10 @@ extern bool pk_proto_compute_cmd_metadata_hash(pk_proto_domain_t domain, const c
                                                const uint8_t epoch[16], uint32_t expires_at,
                                                uint32_t counter, uint32_t flags,
                                                uint8_t aad_out[32]);
+extern bool pk_proto_compute_resp_metadata_hash(pk_proto_domain_t from_domain, const char *vin,
+                                                uint32_t counter, uint32_t flags,
+                                                const uint8_t req_id[17], uint32_t fault,
+                                                uint8_t aad_out[32]);
 
 static int g_fail;
 
@@ -304,8 +308,10 @@ static void test_protocol_crypto_and_wire(void)
     expect(parsed_msg.has_from_routing_addr &&
            memcmp(parsed_msg.from_routing_addr, routing_addr, 16) == 0,
            "routable from_routing_addr preserved");
-    expect(parsed_msg.flags == PK_PROTO_FLAG_ENCRYPT_RESPONSE,
-           "signed request sets FLAG_ENCRYPT_RESPONSE(2)");
+    expect(PK_PROTO_FLAG_ENCRYPT_RESPONSE == 2u,
+           "FLAG_ENCRYPT_RESPONSE mask is 1<<1 == 2");
+    expect(parsed_msg.flags == 2u,
+           "signed request wire flags are 2, not FLAG_USER_COMMAND");
     {
         /* TLV layout and tag order from official protocol.md "Authorizing commands"
          * (INFOTAINMENT, epoch 4c46...dde6, expires_at 2655, counter 7, flags 2),
@@ -2624,6 +2630,115 @@ static void test_official_protocol_vectors(void)
     expect(hex_decode("c228e0ff64991481db3a7bbc133696c5", expect_buf, sizeof(expect_buf)) == 16 &&
            memcmp(gtag, expect_buf, 16) == 0,
            "vec: AES-GCM tag");
+
+    /* Item 14: FLAG_ENCRYPT_RESPONSE is bit 1 (wire value 2). Request AAD omits
+     * TAG_FLAGS when flags are 0. Response AAD always includes TAG_FLAGS, including
+     * the all-zero flags field. Layouts are the official command metadata above,
+     * plus the documented response metadata tags (0, 1, 2, 5, 7, 8, 9, 0xFF). */
+    {
+        static const char *vin = "5YJ30123456789ABC";
+        static const uint8_t epoch[16] = {
+            0x4c, 0x46, 0x3f, 0x9c, 0xc0, 0xd3, 0xd2, 0x69,
+            0x06, 0xe9, 0x82, 0xed, 0x22, 0x4a, 0xdd, 0xe6,
+        };
+        uint8_t req_id[17];
+        uint8_t meta_flags2[80], meta_omit[80], meta_keep0[80];
+        uint8_t hash_flags2[32], hash_omit[32], hash_keep0[32], got[32];
+        uint8_t pt_local[6], ct_local[6], tag_local[16], nonce_local[12], plain[6];
+        size_t n_flags2, n_omit, n_keep0, plain_len;
+        pk_proto_routable_t msg;
+        pk_proto_session_t sess;
+        pk_proto_decrypt_t dec;
+
+        n_flags2 = hex_decode(
+            "000105010103021135594a333031323334353637383941424303104c463f9cc0d3d26906e982ed224adde6040400000a5f050400000007070400000002ff",
+            meta_flags2, sizeof(meta_flags2));
+        n_omit = hex_decode(
+            "000105010103021135594a333031323334353637383941424303104c463f9cc0d3d26906e982ed224adde6040400000a5f050400000007ff",
+            meta_omit, sizeof(meta_omit));
+        n_keep0 = hex_decode(
+            "000105010103021135594a333031323334353637383941424303104c463f9cc0d3d26906e982ed224adde6040400000a5f050400000007070400000000ff",
+            meta_keep0, sizeof(meta_keep0));
+        expect(n_flags2 == 62u && n_omit == 56u && n_keep0 == 62u,
+               "vec: request metadata lengths for flags 2, omitted 0, and explicit 0");
+        expect(pk_proto_sha256(meta_flags2, n_flags2, hash_flags2) &&
+               pk_proto_sha256(meta_omit, n_omit, hash_omit) &&
+               pk_proto_sha256(meta_keep0, n_keep0, hash_keep0),
+               "vec: hash request flag layouts");
+        expect(pk_proto_compute_cmd_metadata_hash(PK_PROTO_DOMAIN_INFOTAINMENT, vin, epoch,
+                                                  2655u, 7u, 2u, got) &&
+               memcmp(got, hash_flags2, 32) == 0 &&
+               hex_decode("54785b6878a51a70acaf240199f92f482962a73a8c3170bfd2a94b1715d127b9",
+                          expect_buf, sizeof(expect_buf)) == 32 &&
+               memcmp(got, expect_buf, 32) == 0,
+               "request AAD encodes FLAG_ENCRYPT_RESPONSE as wire value 2");
+        expect(pk_proto_compute_cmd_metadata_hash(PK_PROTO_DOMAIN_INFOTAINMENT, vin, epoch,
+                                                  2655u, 7u, 0u, got) &&
+               memcmp(got, hash_omit, 32) == 0 &&
+               memcmp(got, hash_keep0, 32) != 0,
+               "request AAD omits TAG_FLAGS when flags are 0");
+
+        expect(hex_decode("05c228e0ff64991481db3a7bbc133696c5", req_id, sizeof(req_id)) == 17u,
+               "vec: decode response request-hash");
+        n_keep0 = hex_decode(
+            "000109010103021135594a3330313233343536373839414243050400000007070400000000081105c228e0ff64991481db3a7bbc133696c5090400000000ff",
+            meta_keep0, sizeof(meta_keep0));
+        n_omit = hex_decode(
+            "000109010103021135594a3330313233343536373839414243050400000007081105c228e0ff64991481db3a7bbc133696c5090400000000ff",
+            meta_omit, sizeof(meta_omit));
+        expect(n_keep0 == 63u && n_omit == 57u, "vec: response metadata lengths");
+        expect(pk_proto_sha256(meta_keep0, n_keep0, hash_keep0) &&
+               pk_proto_sha256(meta_omit, n_omit, hash_omit) &&
+               memcmp(hash_keep0, hash_omit, 32) != 0,
+               "vec: hash response flag layouts");
+        expect(pk_proto_compute_resp_metadata_hash(PK_PROTO_DOMAIN_INFOTAINMENT, vin,
+                                                   7u, 0u, req_id, 0u, got) &&
+               memcmp(got, hash_keep0, 32) == 0 &&
+               memcmp(got, hash_omit, 32) != 0,
+               "response AAD includes TAG_FLAGS even when flags are 0");
+
+        expect(hex_decode("dbf79447fa156674dae1caed", nonce_local, sizeof(nonce_local)) == 12u,
+               "vec: decode response nonce");
+        expect(hex_decode("120452020801", pt_local, sizeof(pt_local)) == 6u,
+               "vec: decode response plaintext");
+        expect(pk_proto_aes128_gcm_encrypt(k, nonce_local, hash_keep0, 32,
+                                           pt_local, 6, ct_local, tag_local),
+               "vec: encrypt with zero-flags response AAD");
+        memset(&msg, 0, sizeof(msg));
+        msg.has_from_domain = true;
+        msg.from_domain = PK_PROTO_DOMAIN_INFOTAINMENT;
+        msg.flags = 0u;
+        msg.signed_message_fault = 0;
+        msg.has_payload_bytes = true;
+        msg.payload_len = 6u;
+        memcpy(msg.payload_bytes, ct_local, 6);
+        msg.has_sig_data = true;
+        msg.has_aes_gcm_resp = true;
+        msg.resp_counter = 7u;
+        msg.resp_nonce_len = PK_PROTO_NONCE_LEN;
+        memcpy(msg.resp_nonce, nonce_local, PK_PROTO_NONCE_LEN);
+        msg.resp_tag_len = PK_PROTO_TAG_LEN;
+        memcpy(msg.resp_tag, tag_local, PK_PROTO_TAG_LEN);
+        memset(&sess, 0, sizeof(sess));
+        sess.valid = true;
+        memcpy(sess.session_key, k, PK_PROTO_SESSION_KEY_LEN);
+        dec = (pk_proto_decrypt_t){
+            .sess = &sess,
+            .vin = vin,
+            .req_id = req_id,
+        };
+        plain_len = 0u;
+        expect(pk_proto_decrypt_routable_payload(&msg, &dec, plain, sizeof(plain), &plain_len) &&
+               plain_len == 6u && memcmp(plain, pt_local, 6) == 0,
+               "decrypt accepts response AAD that includes zero TAG_FLAGS");
+        expect(pk_proto_aes128_gcm_encrypt(k, nonce_local, hash_omit, 32,
+                                           pt_local, 6, ct_local, tag_local),
+               "vec: encrypt with omitted-flags response AAD");
+        memcpy(msg.payload_bytes, ct_local, 6);
+        memcpy(msg.resp_tag, tag_local, PK_PROTO_TAG_LEN);
+        expect(!pk_proto_decrypt_routable_payload(&msg, &dec, plain, sizeof(plain), &plain_len),
+               "decrypt rejects response AAD that omits zero TAG_FLAGS");
+    }
 }
 
 static void test_session_info_clock_rollback_rejected(void)
