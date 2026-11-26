@@ -205,18 +205,19 @@ static size_t build_sim_session_info_wire(uint8_t *out, size_t cap,
     return s2.bytes_written;
 }
 
-static size_t build_sim_vcsec_resp_wire(uint8_t *out, size_t cap,
-                                        pk_proto_domain_t domain,
-                                        const uint8_t *to_route,
-                                        const uint8_t *req_uuid,
-                                        const char *aad_vin,
-                                        const uint8_t req_id[17],
-                                        uint32_t resp_counter,
-                                        bool encrypt,
-                                        bool bad_tag,
-                                        size_t tag_len,
-                                        size_t nonce_len,
-                                        bool empty_status)
+static size_t build_sim_vcsec_resp_wire_ex(uint8_t *out, size_t cap,
+                                           pk_proto_domain_t domain,
+                                           const uint8_t *to_route,
+                                           const uint8_t *req_uuid,
+                                           const char *aad_vin,
+                                           const uint8_t req_id[17],
+                                           uint32_t resp_counter,
+                                           uint32_t aad_counter,
+                                           bool encrypt,
+                                           bool bad_tag,
+                                           size_t tag_len,
+                                           size_t nonce_len,
+                                           bool empty_status)
 {
     VCSEC_FromVCSECMessage fm = VCSEC_FromVCSECMessage_init_zero;
     UniversalMessage_RoutableMessage rm = UniversalMessage_RoutableMessage_init_zero;
@@ -254,7 +255,7 @@ static size_t build_sim_vcsec_resp_wire(uint8_t *out, size_t cap,
         memcpy(rm.payload.protobuf_message_as_bytes.bytes, pt, ps.bytes_written);
     } else {
         if (!pk_proto_compute_resp_metadata_hash(domain, aad_vin ? aad_vin : VEC_VIN,
-                                                 resp_counter, 0u, req_id, 0u, aad)) return 0u;
+                                                 aad_counter, 0u, req_id, 0u, aad)) return 0u;
         if (!pk_proto_aes128_gcm_encrypt(VEC_K, nonce, aad, 32u, pt, ps.bytes_written, ct, tag)) return 0u;
         if (bad_tag) tag[0] ^= 0x55u;
 
@@ -273,6 +274,24 @@ static size_t build_sim_vcsec_resp_wire(uint8_t *out, size_t cap,
     pb_ostream_t os = pb_ostream_from_buffer(out, cap);
     if (!pb_encode(&os, UniversalMessage_RoutableMessage_fields, &rm)) return 0u;
     return os.bytes_written;
+}
+
+static size_t build_sim_vcsec_resp_wire(uint8_t *out, size_t cap,
+                                        pk_proto_domain_t domain,
+                                        const uint8_t *to_route,
+                                        const uint8_t *req_uuid,
+                                        const char *aad_vin,
+                                        const uint8_t req_id[17],
+                                        uint32_t resp_counter,
+                                        bool encrypt,
+                                        bool bad_tag,
+                                        size_t tag_len,
+                                        size_t nonce_len,
+                                        bool empty_status)
+{
+    return build_sim_vcsec_resp_wire_ex(out, cap, domain, to_route, req_uuid, aad_vin, req_id,
+                                        resp_counter, resp_counter, encrypt, bad_tag,
+                                        tag_len, nonce_len, empty_status);
 }
 
 /* ===== Security Pre-Gate 1: Bad SessionInfo HMAC / wrong challenge / truncated tag ===== */
@@ -1028,6 +1047,155 @@ static void test_req_id_required_no_domain_fallback(void)
           "RID.10", "next request counter 0 is kept because the missing note did not burn the domain window");
 }
 
+/* Official A12: response AAD TAG_COUNTER is AES_GCM_Response_data.counter.
+ * The GCM tag is checked in full before that counter enters the window. */
+static void test_response_aad_counter_before_window(void)
+{
+    pk_session_ctx_t ctx;
+    pk_proto_session_t sess;
+    pk_proto_routable_t rmsg;
+    pk_proto_rx_window_t *win;
+    pk_proto_rx_window_t fresh;
+    pk_proto_rx_window_t snap;
+    pk_session_rx_in_t rx;
+    pk_session_obs_in_t obs;
+    uint8_t wire[512];
+    uint8_t req_wire[512];
+    uint8_t req_id[17];
+    uint8_t plain[256];
+    uint8_t inner[32];
+    size_t wlen;
+    size_t plen = 0;
+    size_t ilen;
+    size_t rlen;
+    pk_evidence_t ev = PK_EVIDENCE_UNKNOWN;
+    uint32_t request_counter;
+    const uint32_t response_counter = 0u;
+
+    pk_session_init(&ctx);
+    pk_session_set_conn_gen(&ctx, 10u);
+    pk_proto_session_clear(&sess);
+    pk_proto_rx_window_init(&fresh);
+    memset(req_id, 0, sizeof(req_id));
+
+    pk_session_note_handshake_ex(&ctx, 0, 10u, PK_PROTO_DOMAIN_VEHICLE_SECURITY, ROUTE1, UUID1, 1000u);
+    wlen = build_sim_session_info_wire(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                       ROUTE1, UUID1, UUID1, VEC_VEH_PRIV, VEC_VEH_PUB,
+                                       VEC_EPOCH1, 6u, 2650u, false, 32u);
+    pk_proto_parse_routable(wire, wlen, &rmsg);
+    pk_session_apply_t ap = {
+        .slot = 0, .conn_gen = 10u, .domain = PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+        .vin = VEC_VIN, .privkey = VEC_CLIENT_PRIV, .rmsg = &rmsg,
+        .now_ms = 1050u, .session_now_ms = 1050u
+    };
+    check(wlen > 0u && pk_session_apply(&ctx, &ap, &sess) && sess.valid && sess.counter == 6u,
+          "A12.0", "session starts at command counter 6");
+
+    ilen = pk_proto_encode_vcsec_info_req(PK_PROTO_INFO_GET_STATUS, inner, sizeof(inner));
+    pk_proto_signed_req_t sreq = {
+        .route = { PK_PROTO_DOMAIN_VEHICLE_SECURITY, ROUTE1, UUID2 },
+        .vin = VEC_VIN, .client_pubkey = VEC_CLIENT_PUB,
+        .inner_payload = inner, .inner_len = ilen,
+        .nonce = NONCE1, .now_ms = 2000u, .ttl_seconds = 5u
+    };
+    rlen = pk_proto_build_signed_routable(&sreq, &sess, req_id, req_wire, sizeof(req_wire));
+    request_counter = sess.counter;
+    pk_session_note_request_ex(&ctx, 0, 10u, sess.epoch_gen, PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                               ROUTE1, UUID2, true, 2000u);
+    pk_session_note_req_id(&ctx, 0, 10u, PK_PROTO_DOMAIN_VEHICLE_SECURITY, req_id);
+    win = pk_session_rx_window_for_req(&ctx, PK_PROTO_DOMAIN_VEHICLE_SECURITY, req_id);
+    check(rlen > 0u && request_counter == 7u && request_counter != response_counter &&
+          win != NULL && memcmp(win, &fresh, sizeof(fresh)) == 0,
+          "A12.1", "request counter 7 is not the response counter; noted window is unused");
+
+    rx = (pk_session_rx_in_t){
+        .slot = 0, .conn_gen = 10u, .domain = PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+        .vin = VEC_VIN, .sess = &sess, .rmsg = &rmsg, .now_ms = 2200u,
+        .txn_active = true, .txn_slot = 0, .txn_conn_gen = 10u,
+        .txn_epoch_gen = sess.epoch_gen, .txn_deadline = 7000u,
+        .txn_routing_addr = ROUTE1, .txn_uuid = UUID2,
+        .txn_req_id = req_id, .rx_window = win
+    };
+
+    wlen = build_sim_vcsec_resp_wire_ex(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                        ROUTE1, NULL, VEC_VIN, req_id,
+                                        response_counter, request_counter,
+                                        true, false, 16u, 12u, false);
+    check(wlen > 0u && pk_proto_parse_routable(wire, wlen, &rmsg) &&
+          rmsg.has_aes_gcm_resp && rmsg.resp_counter == response_counter &&
+          !pk_session_accept_rx(&ctx, &rx, plain, sizeof(plain), &plen, &ev) &&
+          ev == PK_EVIDENCE_UNKNOWN &&
+          win != NULL && memcmp(win, &fresh, sizeof(fresh)) == 0 &&
+          sess.counter == request_counter,
+          "A12.2", "response AAD built with the request counter is rejected and does not enter the window");
+
+    wlen = build_sim_vcsec_resp_wire_ex(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                        ROUTE1, NULL, VEC_VIN, req_id,
+                                        response_counter, response_counter,
+                                        true, true, 16u, 12u, false);
+    check(wlen > 0u && pk_proto_parse_routable(wire, wlen, &rmsg) &&
+          !pk_session_accept_rx(&ctx, &rx, plain, sizeof(plain), &plen, &ev) &&
+          ev == PK_EVIDENCE_UNKNOWN &&
+          win != NULL && memcmp(win, &fresh, sizeof(fresh)) == 0 &&
+          sess.counter == request_counter,
+          "A12.3", "failed GCM tag does not enter or consume the anti-replay window");
+
+    wlen = build_sim_vcsec_resp_wire_ex(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                        ROUTE1, NULL, VEC_VIN, req_id,
+                                        response_counter, response_counter,
+                                        true, false, 16u, 12u, false);
+    check(wlen > 0u && pk_proto_parse_routable(wire, wlen, &rmsg) &&
+          pk_session_accept_rx(&ctx, &rx, plain, sizeof(plain), &plen, &ev) &&
+          ev == PK_EVIDENCE_CRYPTO_AUTHENTICATED && plen > 0u &&
+          win != NULL && win->used && win->counter == response_counter &&
+          win->history == 0ULL &&
+          sess.counter == request_counter,
+          "A12.4", "same response counter is accepted when AAD uses that counter and the tag is valid");
+
+    if (win != NULL) {
+        memcpy(&snap, win, sizeof(snap));
+    }
+    check(win != NULL &&
+          !pk_session_accept_rx(&ctx, &rx, plain, sizeof(plain), &plen, &ev) &&
+          memcmp(win, &snap, sizeof(snap)) == 0,
+          "A12.5", "replay of the accepted response counter is rejected and leaves the window unchanged");
+
+    obs = (pk_session_obs_in_t){
+        .slot = 0, .conn_gen = 10u, .domain = PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+        .vin = VEC_VIN, .sess = &sess, .rmsg = &rmsg, .req_id = req_id
+    };
+    if (win != NULL) {
+        memcpy(&snap, win, sizeof(snap));
+    }
+    wlen = build_sim_vcsec_resp_wire_ex(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                        ROUTE1, NULL, VEC_VIN, req_id,
+                                        9u, request_counter,
+                                        true, false, 16u, 12u, false);
+    check(wlen > 0u && pk_proto_parse_routable(wire, wlen, &rmsg) &&
+          rmsg.resp_counter == 9u &&
+          !pk_session_accept_observation_rx(&ctx, &obs, plain, sizeof(plain), &plen, &ev) &&
+          win != NULL && memcmp(win, &snap, sizeof(snap)) == 0,
+          "A12.6", "observation rejects an AAD that uses the request counter and does not move the window");
+
+    wlen = build_sim_vcsec_resp_wire_ex(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                        ROUTE1, NULL, VEC_VIN, req_id,
+                                        9u, 9u, true, true, 16u, 12u, false);
+    check(wlen > 0u && pk_proto_parse_routable(wire, wlen, &rmsg) &&
+          !pk_session_accept_observation_rx(&ctx, &obs, plain, sizeof(plain), &plen, &ev) &&
+          win != NULL && memcmp(win, &snap, sizeof(snap)) == 0,
+          "A12.7", "observation does not consume the window when the GCM tag fails");
+
+    wlen = build_sim_vcsec_resp_wire_ex(wire, sizeof(wire), PK_PROTO_DOMAIN_VEHICLE_SECURITY,
+                                        ROUTE1, NULL, VEC_VIN, req_id,
+                                        9u, 9u, true, false, 16u, 12u, false);
+    check(wlen > 0u && pk_proto_parse_routable(wire, wlen, &rmsg) &&
+          pk_session_accept_observation_rx(&ctx, &obs, plain, sizeof(plain), &plen, &ev) &&
+          ev == PK_EVIDENCE_CRYPTO_AUTHENTICATED &&
+          win != NULL && win->used && win->counter == 9u &&
+          sess.counter == request_counter,
+          "A12.8", "observation accepts counter 9 after the failed tag when AAD uses that counter");
+}
+
 int main(void)
 {
     printf("=== S2 Security Pre-Gate & N01-N08 Kernel Suite ===\n");
@@ -1037,6 +1205,7 @@ int main(void)
     test_pregate_4_peer_identity_vs_continuity();
     test_n01_to_n08_kernel();
     test_req_id_required_no_domain_fallback();
+    test_response_aad_counter_before_window();
 
     printf("\nSUMMARY: %d PASS, %d FAIL (total %d)\n", g_pass, g_fail, g_pass + g_fail);
     return (g_fail == 0) ? 0 : 1;
