@@ -396,6 +396,85 @@ static bool vcsec_lock_field_present(const uint8_t *buf, size_t len)
     return false;
 }
 
+static uint32_t vcsec_closure_fields_present(const uint8_t *buf, size_t len)
+{
+    uint32_t mask = 0u;
+    size_t off = 0u;
+
+    while (off < len) {
+        uint64_t key = 0u;
+        unsigned field;
+        unsigned wire;
+
+        if (!pb_take_varint(buf, len, &off, &key)) {
+            return mask;
+        }
+        field = (unsigned)(key >> 3);
+        wire = (unsigned)(key & 7u);
+        if (field == VCSEC_FromVCSECMessage_vehicleStatus_tag && wire == 2u) {
+            uint64_t n = 0u;
+            size_t sub;
+            size_t sub_end;
+
+            if (!pb_take_varint(buf, len, &off, &n) || n > (uint64_t)(len - off)) {
+                return mask;
+            }
+            sub = off;
+            sub_end = off + (size_t)n;
+            off = sub_end;
+            while (sub < sub_end) {
+                uint64_t sk = 0u;
+                unsigned sf;
+                unsigned sw;
+
+                if (!pb_take_varint(buf, sub_end, &sub, &sk)) {
+                    return mask;
+                }
+                sf = (unsigned)(sk >> 3);
+                sw = (unsigned)(sk & 7u);
+                if (sf == VCSEC_VehicleStatus_closureStatuses_tag && sw == 2u) {
+                    uint64_t cn = 0u;
+                    size_t csub;
+                    size_t cend;
+
+                    if (!pb_take_varint(buf, sub_end, &sub, &cn) || cn > (uint64_t)(sub_end - sub)) {
+                        return mask;
+                    }
+                    csub = sub;
+                    cend = sub + (size_t)cn;
+                    sub = cend;
+                    while (csub < cend) {
+                        uint64_t ck = 0u;
+                        unsigned cf;
+                        unsigned cw;
+
+                        if (!pb_take_varint(buf, cend, &csub, &ck)) {
+                            return mask;
+                        }
+                        cf = (unsigned)(ck >> 3);
+                        cw = (unsigned)(ck & 7u);
+                        if (cf > 0u && cf < 32u && cw == 0u) {
+                            mask |= (1u << cf);
+                        }
+                        if (!pb_skip_value(buf, cend, &csub, cw)) {
+                            return mask;
+                        }
+                    }
+                    continue;
+                }
+                if (!pb_skip_value(buf, sub_end, &sub, sw)) {
+                    return mask;
+                }
+            }
+            continue;
+        }
+        if (!pb_skip_value(buf, len, &off, wire)) {
+            return mask;
+        }
+    }
+    return mask;
+}
+
 bool pk_proto_parse_vcsec_response(const uint8_t *buf, size_t len, pk_proto_vcsec_resp_t *out)
 {
     VCSEC_FromVCSECMessage fm = VCSEC_FromVCSECMessage_init_zero;
@@ -428,14 +507,36 @@ bool pk_proto_parse_vcsec_response(const uint8_t *buf, size_t len, pk_proto_vcse
         out->sleep_status = (int)vs->vehicleSleepStatus;
         if (vs->has_closureStatuses) {
             const VCSEC_ClosureStatuses *cs = &vs->closureStatuses;
+            uint32_t present = vcsec_closure_fields_present(buf, len);
             out->has_closure_statuses = true;
-            out->closures[PK_CLOSURE_FRONT_LEFT]  = map_vcsec_closure(cs->frontDriverDoor);
-            out->closures[PK_CLOSURE_FRONT_RIGHT] = map_vcsec_closure(cs->frontPassengerDoor);
-            out->closures[PK_CLOSURE_REAR_LEFT]   = map_vcsec_closure(cs->rearDriverDoor);
-            out->closures[PK_CLOSURE_REAR_RIGHT]  = map_vcsec_closure(cs->rearPassengerDoor);
-            out->closures[PK_CLOSURE_REAR]        = map_vcsec_closure(cs->rearTrunk);
-            out->closures[PK_CLOSURE_FRONT]       = map_vcsec_closure(cs->frontTrunk);
-            out->charge_port                      = map_vcsec_closure(cs->chargePort);
+            out->closures[PK_CLOSURE_FRONT_LEFT] =
+                (present & (1u << VCSEC_ClosureStatuses_frontDriverDoor_tag))
+                    ? map_vcsec_closure(cs->frontDriverDoor)
+                    : PK_CLOSURE_UNKNOWN;
+            out->closures[PK_CLOSURE_FRONT_RIGHT] =
+                (present & (1u << VCSEC_ClosureStatuses_frontPassengerDoor_tag))
+                    ? map_vcsec_closure(cs->frontPassengerDoor)
+                    : PK_CLOSURE_UNKNOWN;
+            out->closures[PK_CLOSURE_REAR_LEFT] =
+                (present & (1u << VCSEC_ClosureStatuses_rearDriverDoor_tag))
+                    ? map_vcsec_closure(cs->rearDriverDoor)
+                    : PK_CLOSURE_UNKNOWN;
+            out->closures[PK_CLOSURE_REAR_RIGHT] =
+                (present & (1u << VCSEC_ClosureStatuses_rearPassengerDoor_tag))
+                    ? map_vcsec_closure(cs->rearPassengerDoor)
+                    : PK_CLOSURE_UNKNOWN;
+            out->closures[PK_CLOSURE_REAR] =
+                (present & (1u << VCSEC_ClosureStatuses_rearTrunk_tag))
+                    ? map_vcsec_closure(cs->rearTrunk)
+                    : PK_CLOSURE_UNKNOWN;
+            out->closures[PK_CLOSURE_FRONT] =
+                (present & (1u << VCSEC_ClosureStatuses_frontTrunk_tag))
+                    ? map_vcsec_closure(cs->frontTrunk)
+                    : PK_CLOSURE_UNKNOWN;
+            out->charge_port =
+                (present & (1u << VCSEC_ClosureStatuses_chargePort_tag))
+                    ? map_vcsec_closure(cs->chargePort)
+                    : PK_CLOSURE_UNKNOWN;
         }
         break;
     }

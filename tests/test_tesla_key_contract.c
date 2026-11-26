@@ -347,7 +347,7 @@ static void test_protocol_crypto_and_wire(void)
                vcsec_resp.lock_state == PK_LOCK_READ_LOCKED &&
                vcsec_resp.has_closure_statuses &&
                vcsec_resp.closures[PK_CLOSURE_FRONT_LEFT] == PK_CLOSURE_OPEN &&
-               vcsec_resp.closures[PK_CLOSURE_FRONT_RIGHT] == PK_CLOSURE_CLOSED,
+               vcsec_resp.closures[PK_CLOSURE_FRONT_RIGHT] == PK_CLOSURE_UNKNOWN,
                "vcsec VehicleStatus fields decoded accurately");
     }
     {
@@ -3757,6 +3757,67 @@ static void test_disconnect_preserves_confirmed_lock_state(void)
            "disc: BLE disconnect preserves confirmed UNLOCKED");
 }
 
+static void test_vcsec_omitted_closure_and_sleep_defaults(void)
+{
+    pk_proto_vcsec_resp_t vr;
+    pk_app_t app;
+    pk_ble_adapter_t ad;
+    pk_btn_adapter_t btn;
+
+    /* 1. closureStatuses present on wire with ONLY rearTrunk=OPEN (tag 5 = 1);
+     * all other closure enums genuinely omitted -> must be PK_CLOSURE_UNKNOWN,
+     * NOT PK_CLOSURE_CLOSED (0). */
+    static const uint8_t wire_partial_closures[] = {
+        0x0a, 0x04, /* VehicleStatus (field 1, len 4) */
+        0x0a, 0x02, /* closureStatuses (field 1, len 2) */
+        0x28, 0x01  /* rearTrunk (field 5) = OPEN (1) */
+    };
+    expect(pk_proto_parse_vcsec_response(wire_partial_closures,
+                                         sizeof(wire_partial_closures), &vr) &&
+           vr.has_vehicle_status && vr.has_closure_statuses &&
+           vr.closures[PK_CLOSURE_REAR] == PK_CLOSURE_OPEN &&
+           vr.closures[PK_CLOSURE_FRONT_LEFT] == PK_CLOSURE_UNKNOWN &&
+           vr.closures[PK_CLOSURE_FRONT_RIGHT] == PK_CLOSURE_UNKNOWN &&
+           vr.closures[PK_CLOSURE_REAR_LEFT] == PK_CLOSURE_UNKNOWN &&
+           vr.closures[PK_CLOSURE_REAR_RIGHT] == PK_CLOSURE_UNKNOWN &&
+           vr.closures[PK_CLOSURE_FRONT] == PK_CLOSURE_UNKNOWN &&
+           vr.charge_port == PK_CLOSURE_UNKNOWN,
+           "item13: omitted closure enums in closureStatuses stay UNKNOWN, not CLOSED");
+
+    /* 2. Explicit frontDriverDoor=CLOSED(0) on wire is PK_CLOSURE_CLOSED,
+     * while omitted frontTrunk and chargePort remain PK_CLOSURE_UNKNOWN. */
+    static const uint8_t wire_explicit_closed_door[] = {
+        0x0a, 0x04, /* VehicleStatus (field 1, len 4) */
+        0x0a, 0x02, /* closureStatuses (field 1, len 2) */
+        0x08, 0x00  /* frontDriverDoor (field 1) = CLOSED (0) */
+    };
+    expect(pk_proto_parse_vcsec_response(wire_explicit_closed_door,
+                                         sizeof(wire_explicit_closed_door), &vr) &&
+           vr.has_closure_statuses &&
+           vr.closures[PK_CLOSURE_FRONT_LEFT] == PK_CLOSURE_CLOSED &&
+           vr.closures[PK_CLOSURE_FRONT] == PK_CLOSURE_UNKNOWN &&
+           vr.charge_port == PK_CLOSURE_UNKNOWN,
+           "item13: explicit wire CLOSED(0) is CLOSED while omitted closures stay UNKNOWN");
+
+    /* 3. VehicleStatus omitting vehicleSleepStatus (field 3) -> sleep_status==0
+     * (UNKNOWN, neither AWAKE=1 nor ASLEEP=2) and never treated as asleep. */
+    static const uint8_t wire_omit_sleep[] = {
+        0x0a, 0x02, /* VehicleStatus (field 1, len 2) */
+        0x10, 0x01  /* vehicleLockState (field 2) = LOCKED (1), field 3 omitted */
+    };
+    expect(pk_proto_parse_vcsec_response(wire_omit_sleep,
+                                         sizeof(wire_omit_sleep), &vr) &&
+           vr.has_vehicle_status && vr.sleep_status == 0 &&
+           vr.sleep_status != 1 && vr.sleep_status != 2,
+           "item13: omitted vehicleSleepStatus stays UNKNOWN(0), neither AWAKE nor ASLEEP");
+
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    pk_app_vcsec_status(&app, vr.sleep_status == 2, vr.lock_state);
+    expect(app.vcsec_status_valid && !app.vcsec_asleep &&
+           app.vcsec_lock_state == PK_LOCK_READ_LOCKED,
+           "item13: omitted vehicleSleepStatus never marks vehicle asleep");
+}
+
 int main(void)
 {
     test_unwired_not_success();
@@ -3811,6 +3872,7 @@ int main(void)
     test_deep_sleep_wake_guard_ring_replay();
     test_command_observation_decoupling();
     test_disconnect_preserves_confirmed_lock_state();
+    test_vcsec_omitted_closure_and_sleep_defaults();
     if (g_fail) {
         fprintf(stderr, "%d contract check(s) failed\n", g_fail);
         return 1;
