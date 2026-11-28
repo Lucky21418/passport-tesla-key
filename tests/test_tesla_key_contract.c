@@ -3821,6 +3821,77 @@ static void test_vcsec_omitted_closure_and_sleep_defaults(void)
            "item13: omitted vehicleSleepStatus never marks vehicle asleep");
 }
 
+static void test_pro_p00_flash_and_horn_d09_matrix(void)
+{
+    pk_app_t app;
+    pk_ble_adapter_t ad;
+    pk_btn_adapter_t btn;
+    pk_intent_t intent;
+
+    /* 1. Motion unknown (fresh connect, no park lease) -> FLASH & HONK allowed */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    expect(app.motion == PK_MOTION_UNKNOWN && !pk_app_parked(&app),
+           "pro-p00: pre-condition motion unknown");
+    intent = pk_app_make_intent(&app, PK_ACTION_FLASH);
+    expect(pk_app_commit(&app, &intent, 1100u) && g_cap_writes == 1 &&
+           g_cap_frame.action == PK_ACTION_FLASH,
+           "pro-p00: FLASH commits single-shot when motion unknown");
+    /* Busy / no-queue while in-flight */
+    intent = pk_app_make_intent(&app, PK_ACTION_HONK);
+    expect(!pk_app_commit(&app, &intent, 1150u) && app.message == PK_MSG_BUSY_NO_QUEUE &&
+           g_cap_writes == 1,
+           "pro-p00: HONK rejected with BUSY_NO_QUEUE while FLASH in-flight");
+
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    intent = pk_app_make_intent(&app, PK_ACTION_HONK);
+    expect(pk_app_commit(&app, &intent, 1100u) && g_cap_writes == 1 &&
+           g_cap_frame.action == PK_ACTION_HONK,
+           "pro-p00: HONK commits single-shot when motion unknown");
+
+    /* 2. Known motion -> FLASH & HONK blocked with PK_MSG_MOVING (0 writes) */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    app.motion = PK_MOTION_TENDENCY;
+    app.moving = true;
+    intent = pk_app_make_intent(&app, PK_ACTION_FLASH);
+    expect(!pk_app_commit(&app, &intent, 1100u) && app.message == PK_MSG_MOVING &&
+           g_cap_writes == 0,
+           "pro-p00: FLASH blocked on known motion");
+    intent = pk_app_make_intent(&app, PK_ACTION_HONK);
+    expect(!pk_app_commit(&app, &intent, 1100u) && app.message == PK_MSG_MOVING &&
+           g_cap_writes == 0,
+           "pro-p00: HONK blocked on known motion");
+
+    /* 3. Qualified parked -> FLASH & HONK allowed */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    grant_park(&app);
+    g_cap_writes = 0;
+    intent = pk_app_make_intent(&app, PK_ACTION_FLASH);
+    expect(pk_app_commit(&app, &intent, 1100u) && g_cap_writes == 1 &&
+           g_cap_frame.action == PK_ACTION_FLASH,
+           "pro-p00: FLASH commits single-shot when qualified parked");
+
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    grant_park(&app);
+    g_cap_writes = 0;
+    intent = pk_app_make_intent(&app, PK_ACTION_HONK);
+    expect(pk_app_commit(&app, &intent, 1100u) && g_cap_writes == 1 &&
+           g_cap_frame.action == PK_ACTION_HONK,
+           "pro-p00: HONK commits single-shot when qualified parked");
+
+    /* 4. Offline -> FLASH & HONK disabled with PK_MSG_RECONNECT_FIRST (0 writes) */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    pk_app_set_connected(&app, false);
+    g_cap_writes = 0;
+    intent = pk_app_make_intent(&app, PK_ACTION_FLASH);
+    expect(!pk_app_commit(&app, &intent, 1100u) && app.message == PK_MSG_RECONNECT_FIRST &&
+           g_cap_writes == 0,
+           "pro-p00: FLASH blocked offline with RECONNECT_FIRST");
+    intent = pk_app_make_intent(&app, PK_ACTION_HONK);
+    expect(!pk_app_commit(&app, &intent, 1100u) && app.message == PK_MSG_RECONNECT_FIRST &&
+           g_cap_writes == 0,
+           "pro-p00: HONK blocked offline with RECONNECT_FIRST");
+}
+
 int main(void)
 {
     test_unwired_not_success();
@@ -3876,6 +3947,7 @@ int main(void)
     test_command_observation_decoupling();
     test_disconnect_preserves_confirmed_lock_state();
     test_vcsec_omitted_closure_and_sleep_defaults();
+    test_pro_p00_flash_and_horn_d09_matrix();
     if (g_fail) {
         fprintf(stderr, "%d contract check(s) failed\n", g_fail);
         return 1;
