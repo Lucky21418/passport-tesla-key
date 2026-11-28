@@ -110,8 +110,8 @@ static const char *const k_copy[PK_MSG_COUNT] = {
     [PK_MSG_BATTERY_UNKNOWN] = "—",
     [PK_MSG_REBOOT] = "重启后资格与授权失效",
     /* Driving home: closures are unavailable while moving; climate/defog
-     * remain reachable via the existing 500 ms long-● settings entry. */
-    [PK_MSG_TRUNK_UNAVAILABLE] = "箱盖不可用",
+     * settings rows are for pre-entry use only, not driving entry. */
+    [PK_MSG_TRUNK_UNAVAILABLE] = "箱盖不可用；除雾请用车内控制",
     [PK_MSG_BLE_SLOTS_FULL] = "车已在线，蓝牙3连接额已满（请先关手机蓝牙）",
     [PK_MSG_RESPONSE_TOO_LARGE] = "车辆响应过大，未补发",
 };

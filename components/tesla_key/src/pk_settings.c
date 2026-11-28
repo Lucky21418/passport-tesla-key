@@ -13,9 +13,9 @@
  * bool command only when that interface is verified. Defog is an independent
  * SetPreconditioningMax(true, true) and does not also send ClimateOn.
  *
- * Driving entry: the existing 500 ms long-● settings page remains reachable
- * during known motion for explicit one-shot climate/defog per D09; vehicle
- * management pages (cars, VIN, pairing, delete) stay blocked while moving.
+ * Pre-entry only: climate and defog rows are for pre-entry preheating/cooling;
+ * the settings page entry is not opened during known motion (use in-car
+ * controls while driving). Vehicle management pages also stay blocked.
  *
  * Audio toggle stays hidden.
  */
