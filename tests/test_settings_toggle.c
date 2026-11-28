@@ -170,15 +170,17 @@ static void test_main_long_opens_settings(void)
     expect(app.page == PK_PAGE_SETTINGS && !app.settings_quick_mode &&
            app.focus == PK_SETTING_BRIGHTNESS,
            "main long press opens BASIC 5-item settings");
-    expect(cnt == 7 && basic != NULL &&
+    expect(cnt == 9 && basic != NULL &&
            basic[0] == PK_SETTING_BRIGHTNESS &&
            basic[1] == PK_SETTING_POWER &&
            basic[2] == PK_SETTING_FLASH &&
            basic[3] == PK_SETTING_HORN &&
-           basic[4] == PK_SETTING_LOGS &&
-           basic[5] == PK_SETTING_HOTSPOT &&
-           basic[6] == PK_SETTING_RESET,
-           "Pro-P00 settings table exposes 7 settings including FLASH and HORN");
+           basic[4] == PK_SETTING_CLIMATE &&
+           basic[5] == PK_SETTING_DEFOG &&
+           basic[6] == PK_SETTING_LOGS &&
+           basic[7] == PK_SETTING_HOTSPOT &&
+           basic[8] == PK_SETTING_RESET,
+           "Pro-P02 settings table exposes 9 settings including FLASH, HORN, CLIMATE, and DEFOG");
 }
 
 static void test_main_double_opens_status(void)
@@ -213,13 +215,14 @@ static void test_climate_press_again_turns_off(void)
     pk_app_t app;
     pk_ble_adapter_t ad;
 
+    /* STITCH C07: climate row is one-shot ClimateOn (no on/off toggle). */
     setup(&app, &ad);
     app.caps.climate_on = PK_CAP_YES;
     app.focus = PK_SETTING_CLIMATE;
-    expect(pk_app_activate_setting(&app, PK_SETTING_CLIMATE), "climate: toggle");
+    expect(pk_app_activate_setting(&app, PK_SETTING_CLIMATE), "climate: one-shot ClimateOn");
     expect(g_writes == 1 && g_last_action == PK_ACTION_CLIMATE_ON,
            "climate: one climate action");
-    expect(app.pending.bool_enabled == PK_CAP_NO, "climate: direction is off");
+    expect(app.pending.bool_enabled == PK_CAP_YES, "climate: direction is always ON");
     expect(pk_app_command_result(&app, app.pending.id, PK_CMD_RESULT_ACCEPTED, true),
            "climate: ACK");
     expect(!app.has_pending && !app.busy && app.message == PK_MSG_CMD_ACCEPTED,
@@ -231,12 +234,14 @@ static void test_climate_unknown_state_still_turns_on(void)
     pk_app_t app;
     pk_ble_adapter_t ad;
 
+    /* STITCH C07: one-shot ClimateOn does not depend on prior climate_on state. */
     setup(&app, &ad);
     app.caps.climate_on = PK_CAP_UNKNOWN;
     app.focus = PK_SETTING_CLIMATE;
-    expect(!pk_app_activate_setting(&app, PK_SETTING_CLIMATE) &&
-           app.message == PK_MSG_UNQUALIFIED && g_writes == 0,
-           "climate: unknown state refused without blind turn-on");
+    expect(pk_app_activate_setting(&app, PK_SETTING_CLIMATE) &&
+           g_writes == 1 && g_last_action == PK_ACTION_CLIMATE_ON &&
+           app.pending.bool_enabled == PK_CAP_YES,
+           "climate: unknown state sends one-shot ClimateOn");
 }
 
 static void test_defrost_press_again_turns_off(void)
@@ -244,13 +249,14 @@ static void test_defrost_press_again_turns_off(void)
     pk_app_t app;
     pk_ble_adapter_t ad;
 
+    /* STITCH C07: defrost row is one-shot SetPreconditioningMax(true, true). */
     setup(&app, &ad);
     app.caps.preconditioning = PK_CAP_YES;
     app.focus = PK_SETTING_DEFOG;
-    expect(pk_app_activate_setting(&app, PK_SETTING_DEFOG), "defrost: toggle");
+    expect(pk_app_activate_setting(&app, PK_SETTING_DEFOG), "defrost: one-shot preconditioning max");
     expect(g_writes == 1 && g_last_action == PK_ACTION_PRECONDITION_MAX_ON,
            "defrost: one max-preconditioning action");
-    expect(app.pending.bool_enabled == PK_CAP_NO, "defrost: direction is off");
+    expect(app.pending.bool_enabled == PK_CAP_YES, "defrost: direction is always ON");
 }
 
 static void test_climate_and_defrost_off_encoding(void)
@@ -349,7 +355,7 @@ static void test_basic_settings_and_car_list_convergence(void)
     app.page = PK_PAGE_SETTINGS;
     app.focus = PK_SETTING_BRIGHTNESS;
 
-    /* Arrow navigation on 08 settings cycles strictly through the 7 Pro-P00 items */
+    /* Arrow navigation on 08 settings cycles strictly through the 9 Pro-P02 items */
     pk_app_settings_arrow(&app, 1);
     expect(app.focus == PK_SETTING_POWER, "settings arrow 1 -> POWER");
     pk_app_settings_arrow(&app, 1);
@@ -357,13 +363,17 @@ static void test_basic_settings_and_car_list_convergence(void)
     pk_app_settings_arrow(&app, 1);
     expect(app.focus == PK_SETTING_HORN, "settings arrow 3 -> HORN");
     pk_app_settings_arrow(&app, 1);
-    expect(app.focus == PK_SETTING_LOGS, "settings arrow 4 -> LOGS");
+    expect(app.focus == PK_SETTING_CLIMATE, "settings arrow 4 -> CLIMATE");
     pk_app_settings_arrow(&app, 1);
-    expect(app.focus == PK_SETTING_HOTSPOT, "settings arrow 5 -> HOTSPOT");
+    expect(app.focus == PK_SETTING_DEFOG, "settings arrow 5 -> DEFOG");
     pk_app_settings_arrow(&app, 1);
-    expect(app.focus == PK_SETTING_RESET, "settings arrow 6 -> RESET");
+    expect(app.focus == PK_SETTING_LOGS, "settings arrow 6 -> LOGS");
     pk_app_settings_arrow(&app, 1);
-    expect(app.focus == PK_SETTING_BRIGHTNESS, "settings arrow 7 wraps -> BRIGHTNESS");
+    expect(app.focus == PK_SETTING_HOTSPOT, "settings arrow 7 -> HOTSPOT");
+    pk_app_settings_arrow(&app, 1);
+    expect(app.focus == PK_SETTING_RESET, "settings arrow 8 -> RESET");
+    pk_app_settings_arrow(&app, 1);
+    expect(app.focus == PK_SETTING_BRIGHTNESS, "settings arrow 9 wraps -> BRIGHTNESS");
     pk_app_settings_arrow(&app, -1);
     expect(app.focus == PK_SETTING_RESET, "settings arrow -1 wraps -> RESET");
 

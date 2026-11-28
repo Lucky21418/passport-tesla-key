@@ -24,6 +24,8 @@ static const pk_setting_meta_t k_setting_meta[PK_SETTING_COUNT] = {
     [PK_SETTING_POWER]        = { "省电策略",     APP_ICON_MOON },
     [PK_SETTING_FLASH]        = { "寻车闪灯",     APP_ICON_BRIGHTNESS },
     [PK_SETTING_HORN]         = { "寻车鸣笛",     APP_ICON_BRIGHTNESS },
+    [PK_SETTING_CLIMATE]      = { "空调",         APP_ICON_COG },
+    [PK_SETTING_DEFOG]        = { "除雾",         APP_ICON_COG },
     [PK_SETTING_LOGS]         = { "日志与诊断",   APP_ICON_CLIPBOARD },
     [PK_SETTING_HOTSPOT]      = { "热点",         APP_ICON_WIFI },
     [PK_SETTING_RESET]        = { "恢复出厂",     APP_ICON_TRASH },
@@ -60,6 +62,10 @@ static void format_setting_val(const pk_app_t *app, pk_setting_id_t id, char *ou
     case PK_SETTING_HORN:
         snprintf(out, n, !app->connected ? "请先重连"
                        : (app->horn_confirm_armed ? "长按1.2s" : "短按确认"));
+        return;
+    case PK_SETTING_CLIMATE:
+    case PK_SETTING_DEFOG:
+        snprintf(out, n, app->connected ? "短按●" : "请先重连");
         return;
     case PK_SETTING_LOGS:
         snprintf(out, n, "仅脱敏记录");
@@ -347,8 +353,27 @@ static lv_obj_t *build_setting_row(lv_obj_t *parent, int y, int w,
 
 int app_ui_settings_window_start(int focus)
 {
-    (void)focus;
-    return 0;
+    int cnt = 0;
+    const pk_setting_id_t *list = pk_app_quick_settings(&cnt);
+    int i;
+    int idx = 0;
+
+    if (cnt <= 7) {
+        return 0;
+    }
+    for (i = 0; i < cnt; i++) {
+        if ((int)list[i] == focus) {
+            idx = i;
+            break;
+        }
+    }
+    if (idx <= 3) {
+        return 0;
+    }
+    if (idx + 3 >= cnt) {
+        return cnt - 7;
+    }
+    return idx - 3;
 }
 
 static void format_setting_editor_fields(const pk_app_t *app, char *info, size_t info_n,
@@ -408,22 +433,24 @@ void app_ui_render_page_settings(app_ui_ctx_t *ctx, const pk_app_t *app)
     int b_cnt = 0;
     const pk_setting_id_t *k_basic = pk_app_quick_settings(&b_cnt);
     const char *msg = pk_copy(app->message);
+    int start;
 
     if (app->edit_open) {
         render_setting_editor(ctx->body, app, msg);
         return;
     }
 
+    start = app_ui_settings_window_start(focus);
     ctx->settings_row_count = 0;
     ctx->settings_rendered_msg = app->message;
-    ctx->settings_rendered_start = 0;
+    ctx->settings_rendered_start = start;
     ctx->settings_rendered_quick = app->settings_quick_mode;
 
     create_lbl(ctx->body, font_12(), COL_MUTED, UI_MARGIN_X, y, UI_CONTENT_W,
                (msg && msg[0]) ? msg : "本机设备设置 · 按●执行或编辑");
     y += 20;
-    for (i = 0; i < b_cnt && i < 7; i++) {
-        pk_setting_id_t id = k_basic[i];
+    for (i = 0; i < 7 && (start + i) < b_cnt; i++) {
+        pk_setting_id_t id = k_basic[start + i];
         ctx->settings_rows[i] = build_setting_row(ctx->body, y, UI_CONTENT_W, id,
                                                   (int)id == focus, app);
         ctx->settings_row_ids[i] = id;

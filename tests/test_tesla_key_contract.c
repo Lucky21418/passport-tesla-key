@@ -3535,7 +3535,7 @@ static void test_command_observation_decoupling(void)
            pk_app_primary(&app) == PK_ACTION_UNLOCK,
            "decouple: UNLOCK verify timeout keeps confirmed LOCKED and primary is not 查锁态");
 
-    /* 3. Comfort toggles: refuse UNKNOWN, and ACCEPTED never optimistically
+    /* 3. Comfort toggles: sentry/port refuse UNKNOWN, and ACCEPTED never optimistically
      * flips caps without a vehicle observation. */
     setup_connected_main_for_keys(&app, &ad, &btn);
     app.page = PK_PAGE_SETTINGS;
@@ -3543,10 +3543,6 @@ static void test_command_observation_decoupling(void)
     app.caps.preconditioning = PK_CAP_UNKNOWN;
     app.caps.sentry_known = false;
     app.caps.port_open = PK_CAP_UNKNOWN;
-    expect(!pk_app_activate_setting(&app, PK_SETTING_CLIMATE) && app.message == PK_MSG_UNQUALIFIED,
-           "decouple: climate refuses UNKNOWN");
-    expect(!pk_app_activate_setting(&app, PK_SETTING_DEFOG) && app.message == PK_MSG_UNQUALIFIED,
-           "decouple: defog refuses UNKNOWN");
     expect(!pk_app_activate_setting(&app, PK_SETTING_SENTRY) && app.message == PK_MSG_UNQUALIFIED,
            "decouple: sentry refuses UNKNOWN");
     expect(!pk_app_activate_setting(&app, PK_SETTING_PORT) && app.message == PK_MSG_UNQUALIFIED,
@@ -3554,7 +3550,7 @@ static void test_command_observation_decoupling(void)
 
     app.caps.climate_on = PK_CAP_NO;
     expect(pk_app_activate_setting(&app, PK_SETTING_CLIMATE),
-           "decouple: climate sends when reported NO");
+           "decouple: climate sends one-shot ClimateOn");
     expect(pk_app_command_result(&app, app.pending.id, PK_CMD_RESULT_ACCEPTED, true),
            "decouple: climate ACCEPTED completes txn");
     expect(app.caps.climate_on == PK_CAP_NO,
@@ -4002,14 +3998,13 @@ static void test_pro_p00_flash_horn_user_entry_nav(void)
     for (i = 0; i < count; i++) {
         if (list[i] == PK_SETTING_FLASH) has_flash = true;
         if (list[i] == PK_SETTING_HORN) has_horn = true;
-        if (list[i] == PK_SETTING_CLIMATE || list[i] == PK_SETTING_DEFOG ||
-            list[i] == PK_SETTING_SENTRY || list[i] == PK_SETTING_PORT ||
+        if (list[i] == PK_SETTING_SENTRY || list[i] == PK_SETTING_PORT ||
             list[i] == PK_SETTING_VENT || list[i] == PK_SETTING_SEAT ||
             list[i] == PK_SETTING_STEERING) {
             has_unscoped = true;
         }
     }
-    expect(count == 7 && has_flash && has_horn && !has_unscoped,
+    expect(count == 9 && has_flash && has_horn && !has_unscoped,
            "c07-entry: settings list includes FLASH and HORN without unrelated Pro rows");
 
     /* Real user path: MAIN -> 500ms hold DOT -> SETTINGS -> DOWN x2 -> FLASH -> short DOT */
@@ -4101,6 +4096,142 @@ static void test_pro_p00_offline_body_spec_and_keys(void)
            "c07-offline-body: offline ▼ long-press disabled with 请先重连, 0 writes, no queue");
 }
 
+static void test_pro_p02_climate_and_defrost(void)
+{
+    pk_app_t app;
+    pk_ble_adapter_t ad;
+    pk_btn_adapter_t btn;
+    int count = 0;
+    const pk_setting_id_t *list = pk_app_quick_settings(&count);
+    bool has_climate = false, has_defog = false, has_unscoped = false;
+    int i;
+
+    /* 1. Settings list adds ONLY CLIMATE and DEFOG (9 rows total); no seat/steering/sentry/vent/port. */
+    for (i = 0; i < count; i++) {
+        if (list[i] == PK_SETTING_CLIMATE) has_climate = true;
+        if (list[i] == PK_SETTING_DEFOG) has_defog = true;
+        if (list[i] == PK_SETTING_SEAT || list[i] == PK_SETTING_STEERING ||
+            list[i] == PK_SETTING_SENTRY || list[i] == PK_SETTING_VENT ||
+            list[i] == PK_SETTING_PORT) {
+            has_unscoped = true;
+        }
+    }
+    expect(count == 9 && has_climate && has_defog && !has_unscoped,
+           "p02: settings list has 9 rows with CLIMATE & DEFOG and no out-of-scope Pro rows");
+
+    /* 2. Real user path: MAIN -> 500ms hold DOT -> SETTINGS -> DOWN x4 -> CLIMATE -> short DOT. */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    (void)pk_app_button_edge(&app, 1100u, PK_KEY_DOT, PK_EDGE_PRESS);
+    pk_app_tick(&app, 1100u + PK_MAIN_HOLD_MS);
+    (void)pk_app_button_edge(&app, 1650u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    expect(app.page == PK_PAGE_SETTINGS && app.focus == PK_SETTING_BRIGHTNESS,
+           "p02: 500ms hold on MAIN opens SETTINGS at BRIGHTNESS");
+
+    for (i = 0; i < 4; i++) {
+        pk_ms_t t = 1800u + (pk_ms_t)(i * 150u);
+        (void)pk_app_button_edge(&app, t, PK_KEY_DOWN, PK_EDGE_PRESS);
+        (void)pk_app_button_edge(&app, t + 50u, PK_KEY_DOWN, PK_EDGE_RELEASE);
+    }
+    expect(app.focus == PK_SETTING_CLIMATE,
+           "p02: DOWN x4 reaches PK_SETTING_CLIMATE via real key navigation");
+
+    g_cap_writes = 0;
+    (void)pk_app_button_edge(&app, 2500u, PK_KEY_DOT, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 2580u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 2580u + PK_DOUBLE_MS + 10u);
+    expect(g_cap_writes == 1 && g_cap_frame.action == PK_ACTION_CLIMATE_ON &&
+               app.pending.bool_enabled == PK_CAP_YES,
+           "p02: CLIMATE sends single ClimateOn(on=true) without defog");
+
+    /* Busy while in-flight: must not send or queue a 2nd command. */
+    (void)pk_app_button_edge(&app, 3000u, PK_KEY_DOT, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 3080u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 3080u + PK_DOUBLE_MS + 10u);
+    expect(g_cap_writes == 1 && app.message == PK_MSG_BUSY_NO_QUEUE,
+           "p02: busy climate press does not write or queue");
+
+    (void)pk_app_command_result(&app, app.pending.id, PK_CMD_RESULT_ACCEPTED, true);
+
+    /* DOWN x1 -> DEFOG -> short DOT sends single SetPreconditioningMax(true, true) without ClimateOn. */
+    g_cap_writes = 0;
+    (void)pk_app_button_edge(&app, 3600u, PK_KEY_DOWN, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 3650u, PK_KEY_DOWN, PK_EDGE_RELEASE);
+    expect(app.focus == PK_SETTING_DEFOG,
+           "p02: DOWN x1 from CLIMATE reaches PK_SETTING_DEFOG");
+
+    (void)pk_app_button_edge(&app, 3800u, PK_KEY_DOT, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 3880u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 3880u + PK_DOUBLE_MS + 10u);
+    expect(g_cap_writes == 1 && g_cap_frame.action == PK_ACTION_PRECONDITION_MAX_ON &&
+               app.pending.bool_enabled == PK_CAP_YES,
+           "p02: DEFOG sends single SetPreconditioningMax(true, true) without ClimateOn");
+
+    /* 3. D09 matrix: known motion, motion unknown, and qualified park all allow explicit single-shot. */
+    {
+        int mode;
+        for (mode = 0; mode < 3; mode++) {
+            setup_connected_main_for_keys(&app, &ad, &btn);
+            app.page = PK_PAGE_SETTINGS;
+            if (mode == 0) {
+                app.moving = true;
+                app.motion = PK_MOTION_TENDENCY;
+                app.motion_until = app.now + 10000u;
+                app.has_grant = false;
+            } else if (mode == 1) {
+                app.moving = false;
+                app.motion = PK_MOTION_UNKNOWN;
+                app.has_grant = false;
+            } else {
+                app.moving = false;
+                app.motion = PK_MOTION_UNKNOWN;
+                app.has_grant = true;
+                app.grant.proof = true;
+                app.grant.parked = true;
+                app.grant.scope = pk_app_scope(&app);
+                app.grant.received = app.now;
+                app.grant.until = app.now + 10000u;
+            }
+
+            g_cap_writes = 0;
+            expect(pk_app_activate_setting(&app, PK_SETTING_CLIMATE) &&
+                       g_cap_writes == 1 && g_cap_frame.action == PK_ACTION_CLIMATE_ON &&
+                       app.pending.bool_enabled == PK_CAP_YES,
+                   "p02: D09 climate allowed once in known-motion / unknown / parked");
+            (void)pk_app_command_result(&app, app.pending.id, PK_CMD_RESULT_ACCEPTED, true);
+
+            g_cap_writes = 0;
+            expect(pk_app_activate_setting(&app, PK_SETTING_DEFOG) &&
+                       g_cap_writes == 1 && g_cap_frame.action == PK_ACTION_PRECONDITION_MAX_ON &&
+                       app.pending.bool_enabled == PK_CAP_YES,
+                   "p02: D09 defog allowed once in known-motion / unknown / parked");
+            (void)pk_app_command_result(&app, app.pending.id, PK_CMD_RESULT_ACCEPTED, true);
+        }
+    }
+
+    /* 4. Disconnected / unpaired refuse with 0 writes, honest feedback, no queue. */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    app.page = PK_PAGE_SETTINGS;
+    app.connected = false;
+    g_cap_writes = 0;
+    expect(!pk_app_activate_setting(&app, PK_SETTING_CLIMATE) &&
+               g_cap_writes == 0 && app.message == PK_MSG_RECONNECT_FIRST && !app.has_pending,
+           "p02: disconnected climate refused with RECONNECT_FIRST, 0 writes, no queue");
+    expect(!pk_app_activate_setting(&app, PK_SETTING_DEFOG) &&
+               g_cap_writes == 0 && app.message == PK_MSG_RECONNECT_FIRST && !app.has_pending,
+           "p02: disconnected defog refused with RECONNECT_FIRST, 0 writes, no queue");
+
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    app.page = PK_PAGE_SETTINGS;
+    app.paired = false;
+    g_cap_writes = 0;
+    expect(!pk_app_activate_setting(&app, PK_SETTING_CLIMATE) &&
+               g_cap_writes == 0 && app.message == PK_MSG_NOT_PAIRED && !app.has_pending,
+           "p02: unpaired climate refused with NOT_PAIRED, 0 writes, no queue");
+    expect(!pk_app_activate_setting(&app, PK_SETTING_DEFOG) &&
+               g_cap_writes == 0 && app.message == PK_MSG_NOT_PAIRED && !app.has_pending,
+           "p02: unpaired defog refused with NOT_PAIRED, 0 writes, no queue");
+}
+
 int main(void)
 {
     test_unwired_not_success();
@@ -4160,6 +4291,7 @@ int main(void)
     test_pro_p00_flash_horn_stitch_c07_keys();
     test_pro_p00_flash_horn_user_entry_nav();
     test_pro_p00_offline_body_spec_and_keys();
+    test_pro_p02_climate_and_defrost();
     if (g_fail) {
         fprintf(stderr, "%d contract check(s) failed\n", g_fail);
         return 1;

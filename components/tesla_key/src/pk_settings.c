@@ -19,11 +19,13 @@
  * Audio toggle stays hidden.
  */
 
-static const pk_setting_id_t k_basic_settings[7] = {
+static const pk_setting_id_t k_basic_settings[9] = {
     PK_SETTING_BRIGHTNESS,
     PK_SETTING_POWER,
     PK_SETTING_FLASH,
     PK_SETTING_HORN,
+    PK_SETTING_CLIMATE,
+    PK_SETTING_DEFOG,
     PK_SETTING_LOGS,
     PK_SETTING_HOTSPOT,
     PK_SETTING_RESET
@@ -358,37 +360,26 @@ static bool toggle_port_setting(pk_app_t *app)
     return pk_app_commit(app, &intent, app->now);
 }
 
-/* Direction must come from a real authenticated vehicle report; never assume
- * UNKNOWN means "turn on". */
-static bool toggle_climate_setting(pk_app_t *app)
+/* STITCH C07: one-shot ClimateOn (no on/off toggle, no climate+defog macro). */
+static bool activate_climate_on_setting(pk_app_t *app)
 {
     pk_intent_t intent;
-    pk_cap_t want;
 
-    if (app->caps.climate_on == PK_CAP_UNKNOWN) {
-        pk_app_set_msg(app, PK_MSG_UNQUALIFIED);
-        return false;
-    }
-    want = (app->caps.climate_on == PK_CAP_YES) ? PK_CAP_NO : PK_CAP_YES;
-    app->draft.bool_enabled = want;
+    app->draft.bool_enabled = PK_CAP_YES;
     intent = pk_app_make_intent(app, PK_ACTION_CLIMATE_ON);
-    intent.bool_enabled = want;
+    intent.bool_enabled = PK_CAP_YES;
     return pk_app_commit(app, &intent, app->now);
 }
 
-static bool toggle_defog_setting(pk_app_t *app)
+/* STITCH C07: one-shot independent SetPreconditioningMax(true, true)
+ * (does not also send ClimateOn). */
+static bool activate_defog_setting(pk_app_t *app)
 {
     pk_intent_t intent;
-    pk_cap_t want;
 
-    if (app->caps.preconditioning == PK_CAP_UNKNOWN) {
-        pk_app_set_msg(app, PK_MSG_UNQUALIFIED);
-        return false;
-    }
-    want = (app->caps.preconditioning == PK_CAP_YES) ? PK_CAP_NO : PK_CAP_YES;
-    app->draft.bool_enabled = want;
+    app->draft.bool_enabled = PK_CAP_YES;
     intent = pk_app_make_intent(app, PK_ACTION_PRECONDITION_MAX_ON);
-    intent.bool_enabled = want;
+    intent.bool_enabled = PK_CAP_YES;
     return pk_app_commit(app, &intent, app->now);
 }
 
@@ -481,10 +472,10 @@ bool pk_app_activate_setting(pk_app_t *app, pk_setting_id_t key)
         return toggle_port_setting(app);
     }
     if (key == PK_SETTING_CLIMATE) {
-        return toggle_climate_setting(app);
+        return activate_climate_on_setting(app);
     }
     if (key == PK_SETTING_DEFOG) {
-        return toggle_defog_setting(app);
+        return activate_defog_setting(app);
     }
     if (key == PK_SETTING_SEAT || key == PK_SETTING_STEERING) {
         pk_app_begin_editor(app, key);
