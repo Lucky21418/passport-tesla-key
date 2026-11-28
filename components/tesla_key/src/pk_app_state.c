@@ -142,7 +142,7 @@ bool pk_app_navigate(pk_app_t *app, pk_page_t page)
     if (!app) {
         return false;
     }
-    if (pk_app_known_motion(app) && (page == PK_PAGE_CARS || page == PK_PAGE_SETTINGS ||
+    if (pk_app_known_motion(app) && (page == PK_PAGE_CARS ||
                         page == PK_PAGE_VIN || page == PK_PAGE_PAIR ||
                         page == PK_PAGE_DELETE_CONFIRM)) {
         pk_app_set_msg(app, PK_MSG_DRV_MANAGEMENT);

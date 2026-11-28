@@ -4232,6 +4232,78 @@ static void test_pro_p02_climate_and_defrost(void)
            "p02: unpaired defog refused with NOT_PAIRED, 0 writes, no queue");
 }
 
+static void test_pro_p02_driving_settings_entry_and_climate_defrost(void)
+{
+    pk_app_t app;
+    pk_ble_adapter_t ad;
+    pk_btn_adapter_t btn;
+    int i;
+
+    /* Known motion: MAIN -> real 500ms hold DOT -> SETTINGS -> real DOWN x4 -> CLIMATE -> short DOT. */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    app.moving = true;
+    app.motion = PK_MOTION_TENDENCY;
+    app.motion_until = app.now + 30000u;
+    app.has_grant = false;
+
+    (void)pk_app_button_edge(&app, 1100u, PK_KEY_DOT, PK_EDGE_PRESS);
+    pk_app_tick(&app, 1100u + PK_MAIN_HOLD_MS);
+    (void)pk_app_button_edge(&app, 1650u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    expect(app.page == PK_PAGE_SETTINGS && app.focus == PK_SETTING_BRIGHTNESS,
+           "p02-drive: 500ms hold on MAIN enters SETTINGS during known motion");
+
+    for (i = 0; i < 4; i++) {
+        pk_ms_t t = 1800u + (pk_ms_t)(i * 150u);
+        (void)pk_app_button_edge(&app, t, PK_KEY_DOWN, PK_EDGE_PRESS);
+        (void)pk_app_button_edge(&app, t + 50u, PK_KEY_DOWN, PK_EDGE_RELEASE);
+    }
+    expect(app.focus == PK_SETTING_CLIMATE,
+           "p02-drive: real DOWN x4 reaches PK_SETTING_CLIMATE while moving");
+
+    g_cap_writes = 0;
+    (void)pk_app_button_edge(&app, 2500u, PK_KEY_DOT, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 2580u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 2580u + PK_DOUBLE_MS + 10u);
+    expect(g_cap_writes == 1 && g_cap_frame.action == PK_ACTION_CLIMATE_ON &&
+               app.pending.bool_enabled == PK_CAP_YES,
+           "p02-drive: CLIMATE sends single ClimateOn while moving");
+    (void)pk_app_command_result(&app, app.pending.id, PK_CMD_RESULT_ACCEPTED, true);
+
+    /* Real DOWN x1 -> DEFOG -> short DOT sends single SetPreconditioningMax(true, true). */
+    g_cap_writes = 0;
+    (void)pk_app_button_edge(&app, 3200u, PK_KEY_DOWN, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 3250u, PK_KEY_DOWN, PK_EDGE_RELEASE);
+    expect(app.focus == PK_SETTING_DEFOG,
+           "p02-drive: real DOWN x1 reaches PK_SETTING_DEFOG while moving");
+
+    (void)pk_app_button_edge(&app, 3400u, PK_KEY_DOT, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 3480u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 3480u + PK_DOUBLE_MS + 10u);
+    expect(g_cap_writes == 1 && g_cap_frame.action == PK_ACTION_PRECONDITION_MAX_ON &&
+               app.pending.bool_enabled == PK_CAP_YES,
+           "p02-drive: DEFOG sends single SetPreconditioningMax(true, true) while moving");
+    (void)pk_app_command_result(&app, app.pending.id, PK_CMD_RESULT_ACCEPTED, true);
+
+    /* Vehicle management pages remain refused during known motion. */
+    app.page = PK_PAGE_MAIN;
+    expect(!pk_app_navigate(&app, PK_PAGE_CARS) && app.page == PK_PAGE_MAIN &&
+               app.message == PK_MSG_DRV_MANAGEMENT,
+           "p02-drive: PK_PAGE_CARS still refused during known motion");
+    expect(!pk_app_navigate(&app, PK_PAGE_VIN) && app.page == PK_PAGE_MAIN &&
+               app.message == PK_MSG_DRV_MANAGEMENT,
+           "p02-drive: PK_PAGE_VIN still refused during known motion");
+    expect(!pk_app_navigate(&app, PK_PAGE_PAIR) && app.page == PK_PAGE_MAIN &&
+               app.message == PK_MSG_DRV_MANAGEMENT,
+           "p02-drive: PK_PAGE_PAIR still refused during known motion");
+    expect(!pk_app_navigate(&app, PK_PAGE_DELETE_CONFIRM) && app.page == PK_PAGE_MAIN &&
+               app.message == PK_MSG_DRV_MANAGEMENT,
+           "p02-drive: PK_PAGE_DELETE_CONFIRM still refused during known motion");
+
+    /* Driving subtitle no longer claims defog is in-car only. */
+    expect(strstr(pk_copy(PK_MSG_TRUNK_UNAVAILABLE), "除雾请用车内控制") == NULL,
+           "p02-drive: PK_MSG_TRUNK_UNAVAILABLE does not claim in-car-only defog");
+}
+
 int main(void)
 {
     test_unwired_not_success();
@@ -4292,6 +4364,7 @@ int main(void)
     test_pro_p00_flash_horn_user_entry_nav();
     test_pro_p00_offline_body_spec_and_keys();
     test_pro_p02_climate_and_defrost();
+    test_pro_p02_driving_settings_entry_and_climate_defrost();
     if (g_fail) {
         fprintf(stderr, "%d contract check(s) failed\n", g_fail);
         return 1;

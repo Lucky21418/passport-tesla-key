@@ -13,8 +13,9 @@
  * bool command only when that interface is verified. Defog is an independent
  * SetPreconditioningMax(true, true) and does not also send ClimateOn.
  *
- * P1-05 driving defog remains intentionally unclosed: keep the in-car
- * fallback. Do not change the key map or open a driving-writable entry.
+ * Driving entry: the existing 500 ms long-● settings page remains reachable
+ * during known motion for explicit one-shot climate/defog per D09; vehicle
+ * management pages (cars, VIN, pairing, delete) stay blocked while moving.
  *
  * Audio toggle stays hidden.
  */
