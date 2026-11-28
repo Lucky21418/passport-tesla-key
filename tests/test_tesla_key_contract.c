@@ -3892,6 +3892,103 @@ static void test_pro_p00_flash_and_horn_d09_matrix(void)
            "pro-p00: HONK blocked offline with RECONNECT_FIRST");
 }
 
+static void test_pro_p00_flash_horn_stitch_c07_keys(void)
+{
+    pk_app_t app;
+    pk_ble_adapter_t ad;
+    pk_btn_adapter_t btn;
+
+    /* 1. Flash via key state machine: single short tap sends once; in-flight no queue */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    app.page = PK_PAGE_SETTINGS;
+    app.focus = PK_SETTING_FLASH;
+    (void)pk_app_button_edge(&app, 1100u, PK_KEY_DOT, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 1200u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 1200u + PK_DOUBLE_MS + 10u);
+    expect(g_cap_writes == 1 && g_cap_frame.action == PK_ACTION_FLASH,
+           "c07: flash short-press sends single PK_ACTION_FLASH");
+    /* In-flight press does not queue */
+    (void)pk_app_button_edge(&app, 1600u, PK_KEY_DOT, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 1700u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 1700u + PK_DOUBLE_MS + 10u);
+    expect(g_cap_writes == 1 && app.message == PK_MSG_BUSY_NO_QUEUE,
+           "c07: in-flight flash press does not queue");
+
+    /* 2. Horn via key state machine: must arm via short press, then new 1.2s hold */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    app.page = PK_PAGE_SETTINGS;
+    app.focus = PK_SETTING_HORN;
+    /* Unarmed 1.2s hold must NOT send */
+    (void)pk_app_button_edge(&app, 1100u, PK_KEY_DOT, PK_EDGE_PRESS);
+    pk_app_tick(&app, 1100u + 1250u);
+    (void)pk_app_button_edge(&app, 2400u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    expect(g_cap_writes == 0 && !app.horn_confirm_armed && app.message == PK_MSG_HOLD_DANGER,
+           "c07: unarmed 1.2s horn hold does not send");
+    /* Short press arms confirmation with 0 writes */
+    (void)pk_app_button_edge(&app, 2500u, PK_KEY_DOT, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 2600u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 2600u + PK_DOUBLE_MS + 10u);
+    expect(g_cap_writes == 0 && app.horn_confirm_armed && app.message == PK_MSG_HOLD_DANGER,
+           "c07: horn short-press arms confirmation with 0 writes");
+    /* Hold < 1.2s (1000 ms) must NOT send */
+    (void)pk_app_button_edge(&app, 3000u, PK_KEY_DOT, PK_EDGE_PRESS);
+    pk_app_tick(&app, 3000u + 1000u);
+    (void)pk_app_button_edge(&app, 4000u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 4000u + PK_DOUBLE_MS + 10u);
+    expect(g_cap_writes == 0, "c07: horn hold under 1.2s does not send");
+    /* Arrow away cancels confirmation */
+    (void)pk_app_button_edge(&app, 4500u, PK_KEY_UP, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 4550u, PK_KEY_UP, PK_EDGE_RELEASE);
+    expect(!app.horn_confirm_armed && g_cap_writes == 0,
+           "c07: arrow navigation cancels horn confirmation");
+    /* Re-focus horn, arm via short press, then new 1.2s hold sends once */
+    app.focus = PK_SETTING_HORN;
+    (void)pk_app_button_edge(&app, 5000u, PK_KEY_DOT, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 5100u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 5100u + PK_DOUBLE_MS + 10u);
+    expect(app.horn_confirm_armed && g_cap_writes == 0, "c07: horn re-armed");
+    (void)pk_app_button_edge(&app, 5500u, PK_KEY_DOT, PK_EDGE_PRESS);
+    pk_app_tick(&app, 5500u + 1200u);
+    (void)pk_app_button_edge(&app, 6750u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    expect(g_cap_writes == 1 && g_cap_frame.action == PK_ACTION_HONK && !app.horn_confirm_armed,
+           "c07: armed 1.2s horn hold sends single PK_ACTION_HONK");
+
+    /* 3. Known motion blocks both flash and horn through key paths */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    app.motion = PK_MOTION_TENDENCY;
+    app.moving = true;
+    app.page = PK_PAGE_SETTINGS;
+    app.focus = PK_SETTING_FLASH;
+    (void)pk_app_button_edge(&app, 1100u, PK_KEY_DOT, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 1200u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 1200u + PK_DOUBLE_MS + 10u);
+    expect(g_cap_writes == 0 && app.message == PK_MSG_MOVING,
+           "c07: known motion blocks flash via key path");
+    app.focus = PK_SETTING_HORN;
+    (void)pk_app_button_edge(&app, 2000u, PK_KEY_DOT, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 2100u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 2100u + PK_DOUBLE_MS + 10u);
+    (void)pk_app_button_edge(&app, 2500u, PK_KEY_DOT, PK_EDGE_PRESS);
+    pk_app_tick(&app, 2500u + 1200u);
+    (void)pk_app_button_edge(&app, 3750u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    expect(g_cap_writes == 0 && app.message == PK_MSG_MOVING,
+           "c07: known motion blocks horn via key path");
+
+    /* 4. Offline page keeps ▲ flash / ▼ horn keys disabled with RECONNECT_FIRST */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    pk_app_set_connected(&app, false);
+    app.page = PK_PAGE_OFFLINE;
+    g_cap_writes = 0;
+    (void)pk_app_button_edge(&app, 1100u, PK_KEY_UP, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 1200u, PK_KEY_UP, PK_EDGE_RELEASE);
+    expect(g_cap_writes == 0 && app.message == PK_MSG_RECONNECT_FIRST && !app.has_pending,
+           "c07: offline UP (flash) disabled with RECONNECT_FIRST and no queue");
+    (void)pk_app_button_edge(&app, 1500u, PK_KEY_DOWN, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 2800u, PK_KEY_DOWN, PK_EDGE_RELEASE);
+    expect(g_cap_writes == 0 && app.message == PK_MSG_RECONNECT_FIRST && !app.has_pending,
+           "c07: offline DOWN (horn) disabled with RECONNECT_FIRST and no queue");
+}
+
 int main(void)
 {
     test_unwired_not_success();
@@ -3948,6 +4045,7 @@ int main(void)
     test_disconnect_preserves_confirmed_lock_state();
     test_vcsec_omitted_closure_and_sleep_defaults();
     test_pro_p00_flash_and_horn_d09_matrix();
+    test_pro_p00_flash_horn_stitch_c07_keys();
     if (g_fail) {
         fprintf(stderr, "%d contract check(s) failed\n", g_fail);
         return 1;

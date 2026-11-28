@@ -15,14 +15,26 @@
  * long events are not consumed here. An invalid ADC reading is not a press.
  */
 
+#define PK_HORN_CONFIRM_HOLD_MS 1200u
+
 static bool setting_is_dangerous(pk_setting_id_t key)
 {
     return key == PK_SETTING_VENT || key == PK_SETTING_PORT ||
-           key == PK_SETTING_RESET;
+           key == PK_SETTING_RESET || key == PK_SETTING_HORN;
+}
+
+static pk_ms_t dot_hold_threshold_ms(const pk_app_t *app)
+{
+    if (app && app->page == PK_PAGE_SETTINGS && !app->edit_open &&
+        app->focus == PK_SETTING_HORN) {
+        return PK_HORN_CONFIRM_HOLD_MS;
+    }
+    return PK_MAIN_HOLD_MS;
 }
 
 static void page_back(pk_app_t *app)
 {
+    app->horn_confirm_armed = false;
     if (app->edit_open) {
         pk_app_cancel_editor(app);
         return;
@@ -71,9 +83,14 @@ static void short_action(pk_app_t *app, const pk_intent_t *intent, pk_ms_t t)
         if (app->edit_open) {
             (void)pk_app_editor_select(app);
         } else if (setting_is_dangerous(app->focus)) {
-            /* A short tap must not open a closure or the charge port. */
+            /* A short tap must not open a closure, charge port, or honk.
+             * For horn (STITCH C07), short tap arms confirmation for a new 1.2s hold. */
+            if (app->focus == PK_SETTING_HORN) {
+                app->horn_confirm_armed = true;
+            }
             pk_app_set_msg(app, PK_MSG_HOLD_DANGER);
         } else {
+            app->horn_confirm_armed = false;
             (void)pk_app_activate_setting(app, app->focus);
         }
         break;
@@ -103,12 +120,20 @@ static void long_action(pk_app_t *app)
     if (app->page == PK_PAGE_MAIN) {
         if (pk_app_navigate(app, PK_PAGE_SETTINGS)) {
             app->settings_quick_mode = false;
+            app->horn_confirm_armed = false;
             app->focus = PK_SETTING_BRIGHTNESS;
         }
         return;
     }
     if (app->page == PK_PAGE_SETTINGS && !app->edit_open &&
         setting_is_dangerous(app->focus)) {
+        if (app->focus == PK_SETTING_HORN) {
+            if (!app->horn_confirm_armed) {
+                pk_app_set_msg(app, PK_MSG_HOLD_DANGER);
+                return;
+            }
+            app->horn_confirm_armed = false;
+        }
         (void)pk_app_activate_setting(app, app->focus);
         return;
     }
@@ -120,6 +145,7 @@ static void long_action(pk_app_t *app)
 
 static void double_action(pk_app_t *app)
 {
+    app->horn_confirm_armed = false;
     if (app->page == PK_PAGE_MAIN || app->page == PK_PAGE_OFFLINE) {
         if (!app->connected) {
             (void)pk_app_navigate(app, PK_PAGE_CARS);
@@ -233,7 +259,7 @@ void pk_keys_dot_release(pk_app_t *app, pk_ms_t t)
     } else if (!k->consumed && k->second) {
         double_action(app);
         k->consumed = true;
-    } else if (!k->consumed && held >= PK_MAIN_HOLD_MS) {
+    } else if (!k->consumed && held >= dot_hold_threshold_ms(app)) {
         long_action(app);
         k->consumed = true;
     } else if (!k->consumed) {
@@ -258,7 +284,7 @@ void pk_keys_tick(pk_app_t *app, pk_ms_t t)
     }
     k = &app->keys;
     if (k->down && !k->consumed && !k->exit_cycle &&
-        (t - k->down_at) >= PK_MAIN_HOLD_MS) {
+        (t - k->down_at) >= dot_hold_threshold_ms(app)) {
         long_action(app);
         k->consumed = true;
         k->deadline_valid = false;
@@ -310,7 +336,12 @@ bool pk_side_press(pk_app_t *app, pk_key_id_t key, pk_ms_t t)
                 app->offer_focus = PK_OFFER_WAKE;
             }
         } else if (app->page == PK_PAGE_SETTINGS) {
+            app->horn_confirm_armed = false;
             pk_app_settings_arrow(app, key == PK_KEY_UP ? -1 : 1);
+        } else if (app->page == PK_PAGE_OFFLINE) {
+            /* STITCH C07: keep ▲ flash / ▼ horn keybindings on offline page,
+             * disabled with honest reconnect prompt and no queueing. */
+            pk_app_set_msg(app, PK_MSG_RECONNECT_FIRST);
         } else if (app->page == PK_PAGE_CARS) {
             pk_app_list_arrow(app, key);
         } else if (app->page == PK_PAGE_DELETE_CONFIRM) {

@@ -207,6 +207,7 @@ typedef struct pk_app {
     pk_setting_id_t edit_key;
     bool edit_open;
     bool settings_quick_mode;
+    bool horn_confirm_armed;
     pk_draft_t recheck;
     bool has_recheck;
     /* Park-gated action frozen at key-down; replayed once a check-before-act
