@@ -398,6 +398,22 @@ bool pk_app_can_vcsec_unlock(const pk_app_t *app);
 bool pk_app_management_allowed(const pk_app_t *app, pk_mgmt_op_t op, bool current,
                                pk_msg_id_t *why_out);
 
+typedef struct {
+    pk_action_t action;
+    const char *title;
+    const char *gesture;
+    const char *status_hint;
+    bool enabled;
+} pk_offline_zone_spec_t;
+
+typedef struct {
+    pk_offline_zone_spec_t top;
+    pk_offline_zone_spec_t mid;
+    pk_offline_zone_spec_t bot;
+} pk_offline_body_spec_t;
+
+const pk_offline_body_spec_t *pk_app_offline_body_spec(void);
+
 /* VIN helper: trim + ASCII upper, 17 chars [A-HJ-NPR-Z0-9], no I/O/Q.
  * Regional check-digit is not applied globally.
  */

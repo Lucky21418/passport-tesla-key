@@ -717,14 +717,19 @@ void app_ui_render_page_offline(lv_obj_t *body, const pk_app_t *app)
 {
     const char *msg = pk_copy(app->message);
     bool drive_warn = (app->moving || app->auth == PK_MSG_AUTH_UNCONFIRMED);
+    const pk_offline_body_spec_t *spec = pk_app_offline_body_spec();
     build_glance_card(body, 4, 66, drive_warn ? APP_ICON_ALERT : APP_ICON_BT_OFF, drive_warn,
                       drive_warn ? "驾驶中蓝牙断开" : "请先重连",
                       drive_warn ? "勿依赖本设备，注意安全"
                                  : ((msg && msg[0]) ? msg : "车控已禁用，不排队补发"));
-    build_zone_card(body, 75, 52, false, false, true, "前备箱", "长按 ▲", "请先重连");
-    build_zone_card(body, 132, 52, true, false, false, "重新连接",
-                    app->reconnect.active ? "正在有界扫描..." : "发起有界扫描连接", "单击 ●");
-    build_zone_card(body, 189, 52, false, false, true, "后备箱", "长按 ▼", "请先重连");
+    build_zone_card(body, 75, 52, spec->top.enabled, false, !spec->top.enabled,
+                    spec->top.title, spec->top.gesture, spec->top.status_hint);
+    build_zone_card(body, 132, 52, spec->mid.enabled, false, !spec->mid.enabled,
+                    spec->mid.title,
+                    app->reconnect.active ? "正在有界扫描..." : spec->mid.status_hint,
+                    spec->mid.gesture);
+    build_zone_card(body, 189, 52, spec->bot.enabled, false, !spec->bot.enabled,
+                    spec->bot.title, spec->bot.gesture, spec->bot.status_hint);
 }
 
 void app_ui_render_page_wait_or_result(lv_obj_t *body, const pk_app_t *app)

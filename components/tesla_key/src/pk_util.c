@@ -226,3 +226,31 @@ pk_action_t pk_app_primary(const pk_app_t *app)
     }
     return PK_ACTION_LOCK;
 }
+
+const pk_offline_body_spec_t *pk_app_offline_body_spec(void)
+{
+    static const pk_offline_body_spec_t k_spec = {
+        .top = {
+            .action = PK_ACTION_FLASH,
+            .title = "寻车闪灯",
+            .gesture = "单击 ▲",
+            .status_hint = "请先重连",
+            .enabled = false,
+        },
+        .mid = {
+            .action = PK_ACTION_RECONNECT,
+            .title = "重新连接",
+            .gesture = "单击 ●",
+            .status_hint = "发起有界扫描连接",
+            .enabled = true,
+        },
+        .bot = {
+            .action = PK_ACTION_HONK,
+            .title = "寻车鸣笛",
+            .gesture = "长按 ▼",
+            .status_hint = "请先重连",
+            .enabled = false,
+        },
+    };
+    return &k_spec;
+}

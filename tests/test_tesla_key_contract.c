@@ -4054,6 +4054,53 @@ static void test_pro_p00_flash_horn_user_entry_nav(void)
            "c07-entry: navigated HORN armed 1.2s hold sends single PK_ACTION_HONK");
 }
 
+static void test_pro_p00_offline_body_spec_and_keys(void)
+{
+    const pk_offline_body_spec_t *spec = pk_app_offline_body_spec();
+    pk_app_t app;
+    pk_ble_adapter_t ad;
+    pk_btn_adapter_t btn;
+
+    /* Offline body key identities and copy must match STITCH C07 (Flash / Reconnect / Horn),
+     * not frunk/trunk. */
+    expect(spec != NULL, "c07-offline-body: spec non-null");
+    expect(spec->top.action == PK_ACTION_FLASH && !spec->top.enabled &&
+               strcmp(spec->top.title, "寻车闪灯") == 0 &&
+               strcmp(spec->top.gesture, "单击 ▲") == 0 &&
+               strcmp(spec->top.status_hint, "请先重连") == 0 &&
+               strcmp(spec->top.title, "前备箱") != 0 &&
+               strcmp(spec->top.gesture, "长按 ▲") != 0,
+           "c07-offline-body: top zone is disabled Flash (寻车闪灯 / 单击 ▲ / 请先重连)");
+    expect(spec->mid.action == PK_ACTION_RECONNECT && spec->mid.enabled &&
+               strcmp(spec->mid.title, "重新连接") == 0 &&
+               strcmp(spec->mid.gesture, "单击 ●") == 0 &&
+               strcmp(spec->mid.status_hint, "发起有界扫描连接") == 0,
+           "c07-offline-body: mid zone is enabled Reconnect (重新连接 / 单击 ●)");
+    expect(spec->bot.action == PK_ACTION_HONK && !spec->bot.enabled &&
+               strcmp(spec->bot.title, "寻车鸣笛") == 0 &&
+               strcmp(spec->bot.gesture, "长按 ▼") == 0 &&
+               strcmp(spec->bot.status_hint, "请先重连") == 0 &&
+               strcmp(spec->bot.title, "后备箱") != 0,
+           "c07-offline-body: bottom zone is disabled Horn (寻车鸣笛 / 长按 ▼ / 请先重连)");
+
+    /* Offline key presses on ▲ and ▼ must not write or queue. */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    app.connected = false;
+    app.page = PK_PAGE_OFFLINE;
+    g_cap_writes = 0;
+
+    (void)pk_app_button_edge(&app, 1100u, PK_KEY_UP, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 1180u, PK_KEY_UP, PK_EDGE_RELEASE);
+    expect(g_cap_writes == 0 && app.message == PK_MSG_RECONNECT_FIRST && !app.has_pending,
+           "c07-offline-body: offline ▲ short-press disabled with 请先重连, 0 writes, no queue");
+
+    (void)pk_app_button_edge(&app, 1500u, PK_KEY_DOWN, PK_EDGE_PRESS);
+    pk_app_tick(&app, 1500u + 1200u);
+    (void)pk_app_button_edge(&app, 2750u, PK_KEY_DOWN, PK_EDGE_RELEASE);
+    expect(g_cap_writes == 0 && app.message == PK_MSG_RECONNECT_FIRST && !app.has_pending,
+           "c07-offline-body: offline ▼ long-press disabled with 请先重连, 0 writes, no queue");
+}
+
 int main(void)
 {
     test_unwired_not_success();
@@ -4112,6 +4159,7 @@ int main(void)
     test_pro_p00_flash_and_horn_d09_matrix();
     test_pro_p00_flash_horn_stitch_c07_keys();
     test_pro_p00_flash_horn_user_entry_nav();
+    test_pro_p00_offline_body_spec_and_keys();
     if (g_fail) {
         fprintf(stderr, "%d contract check(s) failed\n", g_fail);
         return 1;
