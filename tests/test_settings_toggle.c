@@ -170,13 +170,15 @@ static void test_main_long_opens_settings(void)
     expect(app.page == PK_PAGE_SETTINGS && !app.settings_quick_mode &&
            app.focus == PK_SETTING_BRIGHTNESS,
            "main long press opens BASIC 5-item settings");
-    expect(cnt == 5 && basic != NULL &&
+    expect(cnt == 7 && basic != NULL &&
            basic[0] == PK_SETTING_BRIGHTNESS &&
            basic[1] == PK_SETTING_POWER &&
-           basic[2] == PK_SETTING_LOGS &&
-           basic[3] == PK_SETTING_HOTSPOT &&
-           basic[4] == PK_SETTING_RESET,
-           "BASIC settings table exposes exactly 5 device settings");
+           basic[2] == PK_SETTING_FLASH &&
+           basic[3] == PK_SETTING_HORN &&
+           basic[4] == PK_SETTING_LOGS &&
+           basic[5] == PK_SETTING_HOTSPOT &&
+           basic[6] == PK_SETTING_RESET,
+           "Pro-P00 settings table exposes 7 settings including FLASH and HORN");
 }
 
 static void test_main_double_opens_status(void)
@@ -347,17 +349,21 @@ static void test_basic_settings_and_car_list_convergence(void)
     app.page = PK_PAGE_SETTINGS;
     app.focus = PK_SETTING_BRIGHTNESS;
 
-    /* Arrow navigation on 08 settings cycles strictly through the 5 BASIC items */
+    /* Arrow navigation on 08 settings cycles strictly through the 7 Pro-P00 items */
     pk_app_settings_arrow(&app, 1);
     expect(app.focus == PK_SETTING_POWER, "settings arrow 1 -> POWER");
     pk_app_settings_arrow(&app, 1);
-    expect(app.focus == PK_SETTING_LOGS, "settings arrow 2 -> LOGS");
+    expect(app.focus == PK_SETTING_FLASH, "settings arrow 2 -> FLASH");
     pk_app_settings_arrow(&app, 1);
-    expect(app.focus == PK_SETTING_HOTSPOT, "settings arrow 3 -> HOTSPOT");
+    expect(app.focus == PK_SETTING_HORN, "settings arrow 3 -> HORN");
     pk_app_settings_arrow(&app, 1);
-    expect(app.focus == PK_SETTING_RESET, "settings arrow 4 -> RESET");
+    expect(app.focus == PK_SETTING_LOGS, "settings arrow 4 -> LOGS");
     pk_app_settings_arrow(&app, 1);
-    expect(app.focus == PK_SETTING_BRIGHTNESS, "settings arrow 5 wraps -> BRIGHTNESS");
+    expect(app.focus == PK_SETTING_HOTSPOT, "settings arrow 5 -> HOTSPOT");
+    pk_app_settings_arrow(&app, 1);
+    expect(app.focus == PK_SETTING_RESET, "settings arrow 6 -> RESET");
+    pk_app_settings_arrow(&app, 1);
+    expect(app.focus == PK_SETTING_BRIGHTNESS, "settings arrow 7 wraps -> BRIGHTNESS");
     pk_app_settings_arrow(&app, -1);
     expect(app.focus == PK_SETTING_RESET, "settings arrow -1 wraps -> RESET");
 

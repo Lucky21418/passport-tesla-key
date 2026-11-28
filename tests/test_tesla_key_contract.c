@@ -3989,6 +3989,71 @@ static void test_pro_p00_flash_horn_stitch_c07_keys(void)
            "c07: offline DOWN (horn) disabled with RECONNECT_FIRST and no queue");
 }
 
+static void test_pro_p00_flash_horn_user_entry_nav(void)
+{
+    pk_app_t app;
+    pk_ble_adapter_t ad;
+    pk_btn_adapter_t btn;
+    int count = 0;
+    const pk_setting_id_t *list = pk_app_quick_settings(&count);
+    bool has_flash = false, has_horn = false, has_unscoped = false;
+    int i;
+
+    for (i = 0; i < count; i++) {
+        if (list[i] == PK_SETTING_FLASH) has_flash = true;
+        if (list[i] == PK_SETTING_HORN) has_horn = true;
+        if (list[i] == PK_SETTING_CLIMATE || list[i] == PK_SETTING_DEFOG ||
+            list[i] == PK_SETTING_SENTRY || list[i] == PK_SETTING_PORT ||
+            list[i] == PK_SETTING_VENT || list[i] == PK_SETTING_SEAT ||
+            list[i] == PK_SETTING_STEERING) {
+            has_unscoped = true;
+        }
+    }
+    expect(count == 7 && has_flash && has_horn && !has_unscoped,
+           "c07-entry: settings list includes FLASH and HORN without unrelated Pro rows");
+
+    /* Real user path: MAIN -> 500ms hold DOT -> SETTINGS -> DOWN x2 -> FLASH -> short DOT */
+    setup_connected_main_for_keys(&app, &ad, &btn);
+    (void)pk_app_button_edge(&app, 1100u, PK_KEY_DOT, PK_EDGE_PRESS);
+    pk_app_tick(&app, 1100u + PK_MAIN_HOLD_MS);
+    (void)pk_app_button_edge(&app, 1650u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    expect(app.page == PK_PAGE_SETTINGS && app.focus == PK_SETTING_BRIGHTNESS,
+           "c07-entry: 500ms hold on MAIN opens SETTINGS at BRIGHTNESS");
+
+    (void)pk_app_button_edge(&app, 1800u, PK_KEY_DOWN, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 1850u, PK_KEY_DOWN, PK_EDGE_RELEASE);
+    (void)pk_app_button_edge(&app, 2000u, PK_KEY_DOWN, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 2050u, PK_KEY_DOWN, PK_EDGE_RELEASE);
+    expect(app.focus == PK_SETTING_FLASH,
+           "c07-entry: DOWN x2 reaches PK_SETTING_FLASH without direct focus assignment");
+
+    (void)pk_app_button_edge(&app, 2200u, PK_KEY_DOT, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 2300u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 2300u + PK_DOUBLE_MS + 10u);
+    expect(g_cap_writes == 1 && g_cap_frame.action == PK_ACTION_FLASH,
+           "c07-entry: navigated FLASH short-press sends single PK_ACTION_FLASH");
+
+    /* Complete in-flight flash, then DOWN x1 -> HORN -> short DOT arm -> 1.2s DOT hold */
+    (void)pk_app_command_result(&app, app.pending.id, PK_CMD_RESULT_ACCEPTED, true);
+    g_cap_writes = 0;
+    (void)pk_app_button_edge(&app, 3000u, PK_KEY_DOWN, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 3050u, PK_KEY_DOWN, PK_EDGE_RELEASE);
+    expect(app.focus == PK_SETTING_HORN,
+           "c07-entry: DOWN x1 from FLASH reaches PK_SETTING_HORN");
+
+    (void)pk_app_button_edge(&app, 3200u, PK_KEY_DOT, PK_EDGE_PRESS);
+    (void)pk_app_button_edge(&app, 3300u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    pk_app_tick(&app, 3300u + PK_DOUBLE_MS + 10u);
+    expect(g_cap_writes == 0 && app.horn_confirm_armed,
+           "c07-entry: navigated HORN short-press arms confirmation with 0 writes");
+
+    (void)pk_app_button_edge(&app, 4000u, PK_KEY_DOT, PK_EDGE_PRESS);
+    pk_app_tick(&app, 4000u + 1200u);
+    (void)pk_app_button_edge(&app, 5250u, PK_KEY_DOT, PK_EDGE_RELEASE);
+    expect(g_cap_writes == 1 && g_cap_frame.action == PK_ACTION_HONK && !app.horn_confirm_armed,
+           "c07-entry: navigated HORN armed 1.2s hold sends single PK_ACTION_HONK");
+}
+
 int main(void)
 {
     test_unwired_not_success();
@@ -4046,6 +4111,7 @@ int main(void)
     test_vcsec_omitted_closure_and_sleep_defaults();
     test_pro_p00_flash_and_horn_d09_matrix();
     test_pro_p00_flash_horn_stitch_c07_keys();
+    test_pro_p00_flash_horn_user_entry_nav();
     if (g_fail) {
         fprintf(stderr, "%d contract check(s) failed\n", g_fail);
         return 1;

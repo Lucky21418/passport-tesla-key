@@ -19,9 +19,11 @@
  * Audio toggle stays hidden.
  */
 
-static const pk_setting_id_t k_basic_settings[5] = {
+static const pk_setting_id_t k_basic_settings[7] = {
     PK_SETTING_BRIGHTNESS,
     PK_SETTING_POWER,
+    PK_SETTING_FLASH,
+    PK_SETTING_HORN,
     PK_SETTING_LOGS,
     PK_SETTING_HOTSPOT,
     PK_SETTING_RESET

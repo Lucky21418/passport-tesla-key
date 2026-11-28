@@ -22,6 +22,8 @@ typedef struct {
 static const pk_setting_meta_t k_setting_meta[PK_SETTING_COUNT] = {
     [PK_SETTING_BRIGHTNESS]   = { "屏幕亮度",     APP_ICON_BRIGHTNESS },
     [PK_SETTING_POWER]        = { "省电策略",     APP_ICON_MOON },
+    [PK_SETTING_FLASH]        = { "寻车闪灯",     APP_ICON_BRIGHTNESS },
+    [PK_SETTING_HORN]         = { "寻车鸣笛",     APP_ICON_BRIGHTNESS },
     [PK_SETTING_LOGS]         = { "日志与诊断",   APP_ICON_CLIPBOARD },
     [PK_SETTING_HOTSPOT]      = { "热点",         APP_ICON_WIFI },
     [PK_SETTING_RESET]        = { "恢复出厂",     APP_ICON_TRASH },
@@ -51,6 +53,13 @@ static void format_setting_val(const pk_app_t *app, pk_setting_id_t id, char *ou
         return;
     case PK_SETTING_BRIGHTNESS:
         snprintf(out, n, "%d%%", app->brightness);
+        return;
+    case PK_SETTING_FLASH:
+        snprintf(out, n, app->connected ? "短按●" : "请先重连");
+        return;
+    case PK_SETTING_HORN:
+        snprintf(out, n, !app->connected ? "请先重连"
+                       : (app->horn_confirm_armed ? "长按1.2s" : "短按确认"));
         return;
     case PK_SETTING_LOGS:
         snprintf(out, n, "仅脱敏记录");
